@@ -1,0 +1,66 @@
+# On every push to main/master: build the portable Windows app and publish it as a GitHub release
+# (MareSaveSync-v<version>.<run>-windows.zip containing the MareSaveSync folder).
+name: Build and release
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write          # create the release and its tag
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip pyinstaller -r requirements.txt
+
+      - name: Google sign-in client (.env from repository secrets)
+        shell: pwsh
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        run: |
+          if ($env:GOOGLE_CLIENT_ID -and $env:GOOGLE_CLIENT_SECRET) {
+            "GOOGLE_CLIENT_ID=$env:GOOGLE_CLIENT_ID`nGOOGLE_CLIENT_SECRET=$env:GOOGLE_CLIENT_SECRET" |
+              Out-File -Encoding ascii .env
+          } else {
+            Write-Output "::warning::GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET secrets not set: building without Google sign-in."
+          }
+
+      - name: Build
+        run: python build.py
+
+      - name: Zip
+        id: pkg
+        shell: pwsh
+        run: |
+          $version = "v$(python build.py --version).${{ github.run_number }}"
+          $zip = "MareSaveSync-$version-windows.zip"
+          Remove-Item .env -ErrorAction SilentlyContinue
+          Compress-Archive -Path dist\MareSaveSync -DestinationPath $zip
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "zip=$zip" >> $env:GITHUB_OUTPUT
+
+      - name: Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.pkg.outputs.version }}" "${{ steps.pkg.outputs.zip }}" `
+            --target "${{ github.sha }}" `
+            --title "Mare Save Sync ${{ steps.pkg.outputs.version }}" `
+            --generate-notes

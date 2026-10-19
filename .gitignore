@@ -1,0 +1,14 @@
+.env
+oauth_client_local.py
+credentials.json
+token.json
+
+
+build/
+dist/
+*.spec
+*.exe
+
+__pycache__/
+*.pyc
+.venv/
