@@ -35,6 +35,13 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
           if ($env:GOOGLE_CLIENT_ID -and $env:GOOGLE_CLIENT_SECRET) {
+            # a stray character (e.g. a byte-order mark from pasting) makes Google answer "OAuth client was not found"
+            foreach ($n in 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET') {
+              if ((Get-Item "env:$n").Value -notmatch '^[A-Za-z0-9._-]+$') {
+                Write-Output "::error::Secret $n contains characters a Google client ID/secret can't have (spaces, quotes or an invisible character). Set it again."
+                exit 1
+              }
+            }
             "GOOGLE_CLIENT_ID=$env:GOOGLE_CLIENT_ID`nGOOGLE_CLIENT_SECRET=$env:GOOGLE_CLIENT_SECRET" |
               Out-File -Encoding ascii .env
           } else {
