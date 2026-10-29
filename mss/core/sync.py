@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ..paths import app_dir
 from .diff import CHANGED, CLOUD_ONLY, LOCAL_ONLY
+from .folders import local_file
 from .util import prune_empty_dirs, safe_name
 
 
@@ -42,17 +43,17 @@ def make_plan(diff, direction: str, mirror_deletes: bool = True) -> SyncPlan:
     return plan
 
 
-def backup_files(root, rels, game: str, keep: int = 20):
-    root = Path(root)
-    rels = [r for r in rels if (root / r).is_file()]
-    if not rels:
+def backup_files(files: dict, game: str, keep: int = 20):
+    """Zip local files ({cloud path: file on this PC}) that are about to be replaced or deleted."""
+    files = {r: p for r, p in files.items() if Path(p).is_file()}
+    if not files:
         return None
     d = app_dir() / "backups" / safe_name(game)
     d.mkdir(parents=True, exist_ok=True)
     zp = d / f"{time.strftime('%Y-%m-%d_%H-%M-%S')}_before-sync-down.zip"
     with zipfile.ZipFile(zp, "w", zipfile.ZIP_DEFLATED) as z:
-        for r in rels:
-            z.write(root / r, r)
+        for r, p in files.items():
+            z.write(p, r)
     for old in sorted(d.glob("*.zip"))[:-keep]:
         old.unlink(missing_ok=True)
     return zp
@@ -73,8 +74,8 @@ def backup_cloud(backend, game: str, rels, keep: int = 20):
     return zp
 
 
-def execute_plan(plan: SyncPlan, backend, game: str, local_root, log=print):
-    root = Path(local_root)
+def execute_plan(plan: SyncPlan, backend, game: str, roots: dict, log=print):
+    """roots: {folder id: path on this PC} (see core/folders.py)."""
     total = len(plan.transfer) + len(plan.delete)
     i = 0
     backup = None
@@ -86,21 +87,23 @@ def execute_plan(plan: SyncPlan, backend, game: str, local_root, log=print):
         for e in plan.transfer:
             i += 1
             log(f"[{i}/{total}] Upload  {e.path}")
-            backend.upload(game, e.path, root / e.path, e.local.mtime)
+            backend.upload(game, e.path, local_file(roots, e.path)[1], e.local.mtime)
         for e in plan.delete:
             i += 1
             log(f"[{i}/{total}] Delete from cloud  {e.path}")
             backend.delete(game, e.path)
     else:
-        root.mkdir(parents=True, exist_ok=True)
+        for root in roots.values():
+            if root:
+                Path(root).mkdir(parents=True, exist_ok=True)
         affected = [e.path for e in plan.transfer if e.local] + [e.path for e in plan.delete]
-        backup = backup_files(root, affected, game)
+        backup = backup_files({r: local_file(roots, r)[1] for r in affected}, game)
         if backup:
             log(f"Backed up {len(affected)} local file(s) to {backup}")
         for e in plan.transfer:
             i += 1
             log(f"[{i}/{total}] Download  {e.path}")
-            dest = root / e.path
+            dest = local_file(roots, e.path)[1]
             dest.parent.mkdir(parents=True, exist_ok=True)
             backend.download(game, e.path, dest)
             if e.cloud and e.cloud.mtime:
@@ -111,7 +114,7 @@ def execute_plan(plan: SyncPlan, backend, game: str, local_root, log=print):
         for e in plan.delete:
             i += 1
             log(f"[{i}/{total}] Delete on this PC  {e.path}")
-            p = root / e.path
+            root, p = local_file(roots, e.path)
             try:
                 p.unlink()
             except FileNotFoundError:

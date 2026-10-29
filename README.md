@@ -98,6 +98,10 @@ mss/
 - **Add game** → name it → choose the save folder and the .exe on this PC. _Choose folder → Type or paste a path_ accepts
   things like `%USERPROFILE%\AppData\LocalLow\AcrobaticChirimenjako\SchrodingersCallAdv`
   (AppData is hidden in the normal folder picker).
+- Game keeps saves in more than one place? **Saves** tab → **Add folder…** as many times as needed. Each
+  extra folder is named once and every PC sees it; choose where it is on each PC. Until it's chosen on a
+  PC, its files are left alone there. In the cloud each extra folder is stored under `@2/`, `@3/`, …;
+  **Remove** stops syncing it and deletes its cloud copy (files on the PCs are kept).
 - **Diff** tab shows every file: _Same_, _Different_, _Only on this PC_, _Only in cloud_, _Excluded_,
   with sizes and dates on both sides. The **Note** column says which side changed since this PC last
   synced; _⚠ Changed on both sides_ means a conflict. Double-click a file to compare its contents

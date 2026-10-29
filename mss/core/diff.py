@@ -20,19 +20,24 @@ class DiffEntry:
     changed_side: str | None = None   # "local" | "cloud" | "both" | None (unknown)
 
 
-def compute_diff(local, cloud, excludes, base=None) -> list[DiffEntry]:
+def compute_diff(local, cloud, excludes, base=None, unset=None) -> list[DiffEntry]:
     """Compare this PC with the cloud.
 
     `base` is {path: md5} of the state both sides shared after this PC's last
     sync. It lets us tell *which* side changed (and spot conflicts).
+    `unset` is {cloud prefix: name} of save folders not set on this PC; their files are left alone.
     """
     base = base or {}
+    unset = unset or {}
     out = []
     for rel in sorted(set(local) | set(cloud), key=str.lower):
         l, c = local.get(rel), cloud.get(rel)
         e = DiffEntry(rel, SAME, l, c)
         hits = matching_patterns(rel, excludes)
-        if hits:
+        skip = next((n for p, n in unset.items() if rel.startswith(p)), None)
+        if skip is not None:
+            e.status, e.hint = EXCLUDED, f"Folder “{skip}” not set on this PC"
+        elif hits:
             e.status, e.hint = EXCLUDED, f"Matches {hits[0]}"
         elif l and c:
             if l.md5 != c.md5:

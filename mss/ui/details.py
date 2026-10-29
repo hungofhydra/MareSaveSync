@@ -8,10 +8,10 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from ..art import images
-from ..core.diff import CHANGED, CLOUD_ONLY, EXCLUDED, LOCAL_ONLY, SAME, compute_diff
+from ..core import folders
+from ..core.diff import CHANGED, CLOUD_ONLY, EXCLUDED, LOCAL_ONLY, SAME
 from ..core.excludes import matching_patterns
 from ..core.playtime import fmt_ago, fmt_play_long
-from ..core.scan import scan_folder
 from ..core.util import escape_pattern, fmt_time, human_size
 from .dialogs.metadata import MetadataDialog
 from .dialogs.diff_window import DiffWindow
@@ -56,16 +56,9 @@ class DetailsMixin:
         # saves tab
         dt = tk.Frame(nb, bg=T["face"], padx=6, pady=6)
         nb.add(dt, text="Saves")
-        pr = tk.Frame(dt, bg=T["face"])
-        pr.pack(fill="x")
-        label(pr, "Save folder on this PC:").pack(side="left")
-        self.path_lbl = tk.Label(pr, text="—", bg=T["field"], fg=T["ink"], font=UI, relief="sunken", bd=2,
-                                 anchor="w", padx=4)
-        self.path_lbl.pack(side="left", fill="x", expand=True, padx=6, ipady=1)
-        self.choose_btn = Btn(pr, "Choose…", self.choose_folder_menu)
-        self.choose_btn.pack(side="left")
-        self.open_btn = Btn(pr, "Open", lambda: open_in_explorer(Path(self._local_path())))
-        self.open_btn.pack(side="left", padx=(4, 0))
+        self.folders_frame = tk.Frame(dt, bg=T["face"])
+        self.folders_frame.pack(fill="x")
+        self.folder_btns = []
         ft = tk.Frame(dt, bg=T["face"])
         ft.pack(fill="x", pady=6)
         self.mirror_var = tk.BooleanVar(value=self.settings.data.get("mirror_deletes", True))
@@ -255,13 +248,7 @@ class DetailsMixin:
             return
         gs = self.settings.data["games"].get(g, {})
         self.d_title.configure(text=g)
-        p = gs.get("local_path")
-        if not p:
-            self.path_lbl.configure(text="Not set on this PC — choose where this game keeps its saves")
-        elif not Path(p).is_dir():
-            self.path_lbl.configure(text=f"{p}   (folder not found — Sync down will create it)")
-        else:
-            self.path_lbl.configure(text=p)
+        self._render_folders()
         exe = gs.get("exe")
         self.exe_lbl.configure(text=exe if exe else "Not set — choose the game's .exe to use Play")
         self.args_var.set(gs.get("args", ""))
@@ -286,34 +273,95 @@ class DetailsMixin:
     def last_note(self, text):
         self.backend_lbl.configure(text=text or self._backend_desc)
 
-    def choose_folder_menu(self):
+    # -------------------------------------------------------- save folders
+    def _render_folders(self):
+        """One row per save folder: the main one, then the extra ones listed in the game's cloud config."""
+        f = self.folders_frame
+        for w in f.winfo_children():
+            w.destroy()
+        self.folder_btns = []
+        paths = self.settings.data["games"].get(self.game, {}).get("folders") or {}
+        rows = [(folders.MAIN, "Save folder on this PC:", self._local_path())]
+        rows += [(x["id"], f"{x.get('name') or x['id']}:", paths.get(x["id"]))
+                 for x in folders.extra_folders(self.cfg)]
+        for fid, name, p in rows:
+            r = tk.Frame(f, bg=T["face"])
+            r.pack(fill="x", pady=(0, 4))
+            label(r, name, width=22, anchor="w").pack(side="left")
+            text = (p if p and Path(p).is_dir() else f"{p}   (folder not found — Sync down will create it)" if p
+                    else "Not set on this PC — choose where this game keeps its saves" if not fid
+                    else "Not set on this PC — its files aren't synced here")
+            tk.Label(r, text=text, bg=T["field"], fg=T["ink"], font=UI, relief="sunken", bd=2, anchor="w",
+                     padx=4).pack(side="left", fill="x", expand=True, padx=6, ipady=1)
+            choose = Btn(r, "Choose…", None)
+            choose.configure(command=lambda fid=fid, b=choose: self.choose_folder_menu(fid, b))
+            choose.pack(side="left")
+            opn = Btn(r, "Open", lambda p=p: open_in_explorer(Path(p)))
+            opn.pack(side="left", padx=(4, 0))
+            self.folder_btns += [(choose, True), (opn, bool(p))]
+            if fid:
+                rm = Btn(r, "Remove", lambda fid=fid, name=name.rstrip(":"): self.remove_folder(fid, name),
+                         kind="danger")
+                rm.pack(side="left", padx=(4, 0))
+                self.folder_btns.append((rm, self.game not in self.sessions))
+        r = tk.Frame(f, bg=T["face"])
+        r.pack(fill="x")
+        add = Btn(r, "Add folder…", self.add_folder)
+        add.pack(side="left")
+        label(r, "Games that keep saves in more than one place can sync each of them.", muted=True).pack(
+            side="left", padx=8)
+        self.folder_btns.append((add, bool(self._local_path())))
+        self._update_controls()
+
+    def choose_folder_menu(self, fid, btn):
         m = tk.Menu(self, tearoff=0, bg=C["panel2"], fg=C["fg"], activebackground=C["sel"],
                     activeforeground=C["fg"])
-        m.add_command(label="Browse…", command=self.browse_folder)
-        m.add_command(label="Type or paste a path…  (supports %USERPROFILE% etc.)", command=self.type_folder)
-        x, y = self.choose_btn.winfo_rootx(), self.choose_btn.winfo_rooty() + self.choose_btn.winfo_height()
-        m.tk_popup(x, y)
+        m.add_command(label="Browse…", command=lambda: self.browse_folder(fid))
+        m.add_command(label="Type or paste a path…  (supports %USERPROFILE% etc.)",
+                      command=lambda: self.type_folder(fid))
+        m.tk_popup(btn.winfo_rootx(), btn.winfo_rooty() + btn.winfo_height())
 
-    def browse_folder(self):
-        cur = self._local_path()
-        d = filedialog.askdirectory(parent=self, title=f"Save folder for {self.game} on this PC",
-                                    initialdir=cur if cur and Path(cur).is_dir() else str(Path.home()))
+    def _ask_folder(self, fid, title):
+        cur = self._roots(self.game, self.cfg).get(fid)
+        return filedialog.askdirectory(parent=self, title=title,
+                                       initialdir=cur if cur and Path(cur).is_dir() else str(Path.home()))
+
+    def browse_folder(self, fid=folders.MAIN):
+        d = self._ask_folder(fid, f"Save folder for {self.game} on this PC")
         if d:
-            self._set_local_path(d)
+            self._set_local_path(d, fid)
 
-    def type_folder(self):
+    def type_folder(self, fid=folders.MAIN):
         d = simpledialog.askstring(
             "Save folder", "Full path of the save folder on this PC, e.g.\n"
-            r"%USERPROFILE%\AppData\LocalLow\Studio\Game", parent=self, initialvalue=self._local_path() or "")
+            r"%USERPROFILE%\AppData\LocalLow\Studio\Game", parent=self,
+            initialvalue=self._roots(self.game, self.cfg).get(fid) or "")
         if d and d.strip():
-            self._set_local_path(os.path.expanduser(os.path.expandvars(d.strip().strip('"'))))
+            self._set_local_path(os.path.expanduser(os.path.expandvars(d.strip().strip('"'))), fid)
 
-    def _set_local_path(self, d):
+    def _overlapping(self, d, fid):
+        """Another save folder of this game that is, contains or is inside `d` (they'd sync the same files)."""
+        return next((p for f, p in self._roots(self.game, self.cfg).items()
+                     if f != fid and p and folders.overlaps(p, d)), None)
+
+    def _set_local_path(self, d, fid=folders.MAIN):
         d = str(Path(d))
+        other = self._overlapping(d, fid)
+        if other:
+            messagebox.showerror("Save folder", f"{d}\noverlaps another save folder of this game:\n{other}",
+                                 parent=self)
+            return
         g = self.settings.game(self.game)
-        if g.get("local_path") != d:
-            g["base"] = {}            # new folder → forget the previous sync baseline
-        g["local_path"] = d
+        if fid:
+            paths = g.setdefault("folders", {})
+            if paths.get(fid) != d:     # new folder → forget its part of the previous sync baseline
+                pre = folders.cloud_prefix(fid)
+                g["base"] = {k: v for k, v in g.get("base", {}).items() if not k.startswith(pre)}
+            paths[fid] = d
+        else:
+            if g.get("local_path") != d:
+                g["base"] = {}            # new folder → forget the previous sync baseline
+            g["local_path"] = d
         self.settings.save()
         self.log(f"{self.game}: save folder on this PC set to {d}")
         self._layout_grid()
@@ -321,10 +369,70 @@ class DetailsMixin:
         self._update_controls()
         self.refresh_diff()
 
-    def _scan(self, game, path):
+    def add_folder(self):
+        game = self.game
+        d = self._ask_folder(None, f"Another save folder for {game} on this PC")
+        if not d:
+            return
+        d = str(Path(d))
+        other = self._overlapping(d, None)
+        if other:
+            messagebox.showerror("Add folder", f"{d}\noverlaps another save folder of this game:\n{other}",
+                                 parent=self)
+            return
+        name = simpledialog.askstring("Add folder", "Name for this folder (every PC sees it under this name):",
+                                      parent=self, initialvalue=Path(d).name)
+        if not name or not name.strip():
+            return
+
+        def work():
+            cfg = self.backend.get_game_config(game)
+            fid = folders.new_id(cfg)
+            cfg["folders"] = folders.extra_folders(cfg) + [{"id": fid, "name": name.strip()}]
+            self.backend.set_game_config(game, cfg)
+            return cfg, fid
+
+        def done(r):
+            cfg, fid = r
+            self.log(f"{game}: added save folder “{name.strip()}”")
+            if game == self.game:
+                self.cfg = cfg
+                self._set_local_path(d, fid)
+        self.run_bg("Adding folder", work, done)
+
+    def remove_folder(self, fid, name):
+        game = self.game
+        pre = folders.cloud_prefix(fid)
+        n = sum(1 for r in self.cloud_scan if r.startswith(pre))
+        if not messagebox.askyesno(
+                "Remove folder", f"Stop syncing “{name}” for {game} on every PC?\n\n"
+                f"Its {n} cloud file(s) are deleted"
+                + (" (to the Google Drive trash)" if self.backend.kind == "gdrive" else "")
+                + ". Files on this PC are not touched.", icon="warning", parent=self):
+            return
+
+        def work():
+            cfg = self.backend.get_game_config(game)
+            cfg["folders"] = [x for x in folders.extra_folders(cfg) if x["id"] != fid]
+            self.backend.set_game_config(game, cfg)
+            for rel in self.backend.list_files(game):
+                if rel.startswith(pre):
+                    self.backend.delete(game, rel)
+
+        def done(_):
+            gs = self.settings.game(game)
+            (gs.get("folders") or {}).pop(fid, None)
+            gs["base"] = {k: v for k, v in gs.get("base", {}).items() if not k.startswith(pre)}
+            self.settings.save()
+            self.log(f"{game}: removed save folder “{name}”")
+            if game == self.game:
+                self.refresh_diff()
+        self.run_bg("Removing folder", work, done)
+
+    def _scan(self, game):
         cfg = self.backend.get_game_config(game)
         errors: list = []
-        local = scan_folder(path, errors) if path else {}
+        local = folders.scan_local(self._roots(game, cfg), errors)
         for e in errors:
             self.log_ts(f"Could not read {e}  (is the game still running?)")
         cloud = self.backend.list_files(game)
@@ -333,8 +441,8 @@ class DetailsMixin:
     def refresh_diff(self):
         if not self.game:
             return
-        game, path = self.game, self._local_path()
-        self.run_bg(f"Comparing {game}", lambda: self._scan(game, path),
+        game = self.game
+        self.run_bg(f"Comparing {game}", lambda: self._scan(game),
                     lambda r: self._apply_scan(game, r))
 
     def _apply_scan(self, game, res):
@@ -342,18 +450,19 @@ class DetailsMixin:
             return
         self.cfg, self.local_scan, self.cloud_scan = res
         self.cfg.setdefault("excludes", [])
+        self._render_folders()
         self._render_excludes()
         self.render_diff()
 
     def render_diff(self):
         if not self.game:
             return
-        base = self.settings.data.get("games", {}).get(self.game, {}).get("base", {})
-        self.diff = compute_diff(self.local_scan, self.cloud_scan, self.cfg.get("excludes", []), base)
+        self.diff = self._diff(self.game, self.cfg, self.local_scan, self.cloud_scan)
         if self._local_path():
             self._set_state(self.game, self._state_from(self.diff))
         self.tree.delete(*self.tree.get_children())
         self.entries = {}
+        names = {folders.cloud_prefix(x["id"]): x.get("name") or x["id"] for x in folders.extra_folders(self.cfg)}
         for e in self.diff:
             if (e.status == SAME and not self.show_same.get()) or \
                (e.status == EXCLUDED and not self.show_excl.get()):
@@ -364,7 +473,9 @@ class DetailsMixin:
             if e.changed_side == "both":
                 tags.append("conflict")
                 hint = "⚠ " + hint
-            self.tree.insert("", "end", iid=e.path, text="  " + e.path, tags=tags, values=(
+            pre = next((p for p in names if e.path.startswith(p)), "")
+            shown = f"[{names[pre]}]  {e.path[len(pre):]}" if pre else e.path
+            self.tree.insert("", "end", iid=e.path, text="  " + shown, tags=tags, values=(
                 STATUS_LABEL[e.status], human_size(l.size) if l else "—", fmt_time(l.mtime) if l else "",
                 human_size(c.size) if c else "—", fmt_time(c.mtime) if c else "", hint))
             self.entries[e.path] = e
@@ -394,11 +505,12 @@ class DetailsMixin:
         m.delete(0, "end")
         m.add_command(label="Compare contents…", command=lambda: self.show_file_diff(e))
         m.add_separator()
+        hits = matching_patterns(e.path, self.cfg.get("excludes", []))
         if e.status == EXCLUDED:
-            hits = matching_patterns(e.path, self.cfg.get("excludes", []))
-            m.add_command(label=f"Stop excluding (remove {', '.join(hits)})",
-                          command=lambda: self._save_excludes(
-                              [p for p in self.cfg["excludes"] if p not in hits]))
+            if hits:                # else: its folder isn't set on this PC
+                m.add_command(label=f"Stop excluding (remove {', '.join(hits)})",
+                              command=lambda: self._save_excludes(
+                                  [p for p in self.cfg["excludes"] if p not in hits]))
         else:
             m.add_command(label="Exclude this file", command=lambda: self.add_excludes(
                 ["/" + escape_pattern(e.path)]))
@@ -410,18 +522,19 @@ class DetailsMixin:
             if ext:
                 m.add_command(label=f"Exclude all *{ext} files",
                               command=lambda: self.add_excludes(["*" + escape_pattern(ext)]))
-        if e.local and self._local_path():
+        if e.local:
             m.add_separator()
             m.add_command(label="Show in folder",
-                          command=lambda: open_in_explorer(Path(self._local_path()) / e.path))
+                          command=lambda: open_in_explorer(folders.local_file(self._roots(self.game, self.cfg),
+                                                                              e.path)[1]))
         m.tk_popup(ev.x_root, ev.y_root)
 
     def show_file_diff(self, e):
-        game, root = self.game, self._local_path()
+        game, roots = self.game, self._roots(self.game, self.cfg)
 
         def work():
             cloud = self.backend.read_bytes(game, e.path) if e.cloud else None
-            local = (Path(root) / e.path).read_bytes() if e.local and root else None
+            local = folders.local_file(roots, e.path)[1].read_bytes() if e.local else None
             return cloud, local
         self.run_bg(f"Loading {e.path}", work, lambda r: DiffWindow(self, e, r[0], r[1]))
 
@@ -453,13 +566,12 @@ class DetailsMixin:
         self.run_bg("Saving exclusions", work, done)
 
     def _rel_to_root(self, p):
-        root = Path(self._local_path()).resolve()
-        try:
-            rel = Path(p).resolve().relative_to(root).as_posix()
-        except ValueError:
-            messagebox.showerror("Exclusions", f"{p}\nis not inside the save folder\n{root}", parent=self)
-            return None
-        return rel if rel != "." else None
+        roots = self._roots(self.game, self.cfg)
+        rel = folders.to_cloud_rel(roots, p)
+        if rel is None:
+            messagebox.showerror("Exclusions", f"{p}\nis not inside a save folder of this game:\n"
+                                 + "\n".join(r for r in roots.values() if r), parent=self)
+        return rel or None
 
     def exclude_pick_file(self):
         files = filedialog.askopenfilenames(parent=self, title="Files to exclude",

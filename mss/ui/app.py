@@ -11,7 +11,8 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 
 from .. import APP_TITLE, VERSION, storage
-from ..core.diff import EXCLUDED, SAME, auto_direction
+from ..core import folders
+from ..core.diff import EXCLUDED, SAME, auto_direction, compute_diff
 from ..core.playtime import aggregate_stats
 from ..core.settings import Settings
 from .. import launcher
@@ -373,10 +374,12 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
         on(self.new_btn, connected)
         on(self.reload_btn, connected)
         on(self.play_btn, g is not None and not self.busy)
-        for b in (self.choose_btn, self.refresh_btn, self.clear_btn):
+        for b in (self.refresh_btn, self.clear_btn):
             on(b, has_game)
-        for b in (self.up_btn, self.down_btn, self.open_btn):
+        for b in (self.up_btn, self.down_btn):
             on(b, has_path and g not in self.sessions)
+        for b, ok in self.folder_btns:
+            on(b, has_game and ok)
         on(self.excl_btns[0], has_path)
         on(self.excl_btns[1], has_path)
         on(self.excl_btns[2], has_game)
@@ -387,6 +390,15 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
         if not g:
             return None
         return self.settings.data.get("games", {}).get(g, {}).get("local_path")
+
+    def _roots(self, g, cfg) -> dict:
+        """{folder id: path on this PC or None} of every save folder of the game (see core/folders.py)."""
+        return folders.local_roots(self.settings.data.get("games", {}).get(g, {}), cfg)
+
+    def _diff(self, g, cfg, local, cloud):
+        gs = self.settings.data.get("games", {}).get(g, {})
+        return compute_diff(local, cloud, cfg.get("excludes", []), gs.get("base", {}),
+                            folders.unset_prefixes(gs, cfg))
 
     def _save_mirror(self):
         self.settings.data["mirror_deletes"] = self.mirror_var.get()
