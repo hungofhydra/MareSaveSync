@@ -8,9 +8,10 @@ import subprocess
 import sys
 import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
-from .paths import FROZEN, SOURCE_ROOT
+from .paths import FROZEN, RES_DIR, SOURCE_ROOT
 
 try:
     import psutil
@@ -25,6 +26,32 @@ def split_args(args: str) -> list[str]:
     if not args or not args.strip():
         return []
     return [a.strip('"') for a in shlex.split(args, posix=False)]
+
+
+def _child_env() -> dict[str, str]:
+    """Our environment minus PATH entries pointing into the bundle, so games never pick up our DLLs."""
+    env = dict(os.environ)
+    if FROZEN and env.get("PATH"):
+        bundle = os.path.normcase(str(RES_DIR))
+        env["PATH"] = os.pathsep.join(p for p in env["PATH"].split(os.pathsep)
+                                      if p and not os.path.normcase(os.path.abspath(p)).startswith(bundle))
+    return env
+
+
+@contextmanager
+def _no_bundle_dll_dir():
+    """The PyInstaller bootloader points SetDllDirectory at _internal and child processes inherit it, so a game
+    would load our bundled vcruntime140.dll (RPCS3 refuses to start then). Clear it while spawning, then restore."""
+    if not (FROZEN and sys.platform == "win32"):
+        yield
+        return
+    import ctypes
+    k32 = ctypes.windll.kernel32
+    k32.SetDllDirectoryW(None)
+    try:
+        yield
+    finally:
+        k32.SetDllDirectoryW(str(RES_DIR))
 
 
 def running_under(folder: Path) -> bool:
@@ -105,10 +132,12 @@ class GameSession(threading.Thread):
         else:
             self.started = time.time()
             try:
-                if exe.suffix.lower() in (".exe", ".bat", ".cmd") or sys.platform != "win32":
-                    proc = subprocess.Popen([str(exe)] + split_args(self.args), cwd=str(folder))
-                else:
-                    os.startfile(str(exe))  # type: ignore[attr-defined]
+                with _no_bundle_dll_dir():
+                    if exe.suffix.lower() in (".exe", ".bat", ".cmd") or sys.platform != "win32":
+                        proc = subprocess.Popen([str(exe)] + split_args(self.args), cwd=str(folder),
+                                                env=_child_env())
+                    else:
+                        os.startfile(str(exe))  # type: ignore[attr-defined]
             except OSError as ex:
                 self.on_end(self.game, 0, ex)
                 return
