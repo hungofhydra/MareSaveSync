@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from tkinter import messagebox
 
-from ..core.diff import EXCLUDED, baseline, compute_diff
+from ..core.diff import EXCLUDED, baseline
 from ..core.sync import execute_plan, make_plan
 from ..core.util import human_size
 
@@ -14,27 +14,30 @@ class SyncMixin:
     """Part of App (see ui/app.py)."""
 
     def sync(self, direction):
-        game, path = self.game, self._local_path()
-        if not path:
-            return
-        if direction == "up" and not Path(path).is_dir():
-            messagebox.showerror("Sync up", f"The save folder does not exist:\n{path}", parent=self)
+        game = self.game
+        if not self._local_path():
             return
 
         def after_scan(res):
             self._apply_scan(game, res)
+            roots = self._roots(game, res[0])
+            missing = [p for p in roots.values() if p and not Path(p).is_dir()]
+            if direction == "up" and missing:
+                messagebox.showerror("Sync up", "The save folder does not exist:\n" + "\n".join(missing),
+                                     parent=self)
+                return
             plan = make_plan(self.diff, direction, self.mirror_var.get())
             if plan.empty:
                 messagebox.showinfo("SaveSync", "Already in sync — nothing to do.", parent=self)
                 return
-            if not messagebox.askyesno(f"Sync {direction}", self._plan_text(game, plan, path),
+            if not messagebox.askyesno(f"Sync {direction}", self._plan_text(game, plan),
                                        icon="warning" if plan.at_risk else "question", parent=self):
                 return
-            self.run_bg(f"Syncing {direction}", lambda: self._do_sync(game, path, plan),
+            self.run_bg(f"Syncing {direction}", lambda: self._do_sync(game, roots, plan),
                         lambda r: self._after_sync(game, direction, r))
-        self.run_bg(f"Comparing {game}", lambda: self._scan(game, path), after_scan)
+        self.run_bg(f"Comparing {game}", lambda: self._scan(game), after_scan)
 
-    def _plan_text(self, game, plan, path):
+    def _plan_text(self, game, plan):
         up = plan.direction == "up"
         n = lambda k: f"{k} file" + ("" if k == 1 else "s")  # noqa: E731
         size = sum((e.local if up else e.cloud).size for e in plan.transfer)
@@ -60,9 +63,9 @@ class SyncMixin:
         lines += ["", "Make sure the game is closed. Continue?"]
         return "\n".join(lines)
 
-    def _do_sync(self, game, path, plan):
-        backup = execute_plan(plan, self.backend, game, path, log=self.log_ts)
-        res = self._scan(game, path)
+    def _do_sync(self, game, roots, plan):
+        backup = execute_plan(plan, self.backend, game, roots, log=self.log_ts)
+        res = self._scan(game)
         return backup, res
 
     def _after_sync(self, game, direction, r, quiet=False):
@@ -72,8 +75,7 @@ class SyncMixin:
         g["base"] = baseline(local, cloud, cfg.get("excludes", []))
         g["last_sync"] = {"direction": direction, "time": time.time()}
         self.settings.save()
-        self._set_state(game, self._state_from(compute_diff(local, cloud, cfg.get("excludes", []),
-                                                                 g["base"])))
+        self._set_state(game, self._state_from(self._diff(game, cfg, local, cloud)))
         if game == self.game:
             self._render_header()
             self._apply_scan(game, res)

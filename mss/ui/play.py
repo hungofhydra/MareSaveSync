@@ -6,7 +6,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox
 
 from .. import APP_TITLE, launcher
-from ..core.diff import auto_direction, compute_diff
+from ..core.diff import auto_direction
 from ..core.playtime import aggregate_stats, fmt_play_long
 from ..core.sync import make_plan
 from .dialogs.conflict import ConflictDialog
@@ -173,9 +173,6 @@ class PlayMixin:
 
     def auto_sync(self, g, moment, then):
         """moment "before": sync before launching (then(False) cancels launch). "after": upload after playing."""
-        path = self._local_path(g)
-        gs = self.settings.game(g)
-
         def failed(ex):
             if moment == "before":
                 self.show_window()
@@ -189,7 +186,7 @@ class PlayMixin:
 
         def checked(res):
             cfg, local, cloud = res
-            diff = compute_diff(local, cloud, cfg.get("excludes", []), gs.get("base", {}))
+            diff = self._diff(g, cfg, local, cloud)
             direction = auto_direction(diff)
             if self.game == g:
                 self._apply_scan(g, res)
@@ -215,7 +212,8 @@ class PlayMixin:
                 then(True)
                 return
             self.log(f"{g}: automatic sync {direction} ({len(plan.transfer)} file(s))")
-            self.run_bg(f"Sync {direction}: {g}", lambda: self._do_sync(g, path, plan),
+            roots = self._roots(g, cfg)
+            self.run_bg(f"Sync {direction}: {g}", lambda: self._do_sync(g, roots, plan),
                         lambda r: (self._after_sync(g, direction, r, quiet=True), then(True)), failed=failed)
 
-        self.run_bg(f"Checking saves: {g}", lambda: self._scan(g, path), checked, failed=failed)
+        self.run_bg(f"Checking saves: {g}", lambda: self._scan(g), checked, failed=failed)
