@@ -1,4 +1,5 @@
-"""Pick which game this is (for its name and description) and its cover: search a source or use your own image.
+"""Pick which game this is (for its name and description) and its cover and banner: search a source or use your
+own images.
 
 Used for "Game info & artwork…" on an existing game, and when adding a game (add=True): then nothing is
 saved here; .result says what was chosen and the caller creates the game with it.
@@ -29,10 +30,16 @@ if TYPE_CHECKING:
     from ..app import App
 
 
+# The images you can pick: art key -> what the source calls them, and how they're laid out (8 per page).
+KINDS = {
+    "grid": dict(api="grids", noun="cover", w=100, h=150, cols=4),
+    "hero": dict(api="heroes", noun="banner", w=212, h=68, cols=2),
+}
+
+
 class MetadataDialog(tk.Toplevel):
     """result (add mode only): None = cancelled, {} = add without choosing (looked up automatically later),
     or {"name": library name, "art": art dict or None, "info": info dict or None}."""
-    TW, TH = 100, 150
 
     def __init__(self, app: App, game, add=False):
         super().__init__(app)
@@ -45,19 +52,22 @@ class MetadataDialog(tk.Toplevel):
         self.transient(app)
         self.q: queue.Queue = queue.Queue()
         self.results: list = []
-        self.grids: list = []
         self.thumbs: list = []
         self.infos: dict = {}       # result id -> info dict (None while loading / if the lookup failed)
-        self.chosen = None
+        self.kind = "grid"          # which images are showing: "grid" (covers) or "hero" (banners)
+        self.imgs = {k: [] for k in KINDS}
+        self.loaded = {k: None for k in KINDS}      # game id the images in .imgs are (being) loaded for
+        self.chosen = {k: None for k in KINDS}
+        self.custom = {k: None for k in KINDS}      # an image picked from a file: {"url": "custom:…", "_file": path}
         self.offer_name = None      # add mode: official name offered instead of the typed one
-        self.custom = None          # a cover picked from a file: {"url": "custom:…", "_file": path}
         self.api = self.info_api = None
         self.gen = 0                # bumped on source change so late replies from the old source are dropped
         TitleBar(self, title, app.icon16).pack(fill="x", padx=2, pady=2)
         f = tk.Frame(self, bg=T["face"], padx=12, pady=10)
         f.pack(fill="both", expand=True)
         if add:
-            label(f, "Which game is this? Pick it on the left for its name and description, then click a cover.",
+            label(f, "Which game is this? Pick it on the left for its name and description, then click a cover "
+                  "and a banner.",
                   bold=True).pack(anchor="w", pady=(0, 6))
         r = tk.Frame(f, bg=T["face"])
         r.pack(fill="x")
@@ -81,9 +91,19 @@ class MetadataDialog(tk.Toplevel):
                                    **app._field(body))
         self.res_list.pack(side="left", fill="y")
         self.res_list.bind("<<ListboxSelect>>", lambda e: self._on_select())
-        tf = tk.Frame(body, bg=GRID_BG, relief="sunken", bd=2)
-        tf.pack(side="left", fill="both", expand=True, padx=(8, 0))
-        self.canvas = tk.Canvas(tf, bg=GRID_BG, width=4 * (self.TW + 12) + 12, height=2 * (self.TH + 12) + 12,
+        rc = tk.Frame(body, bg=T["face"])
+        rc.pack(side="left", fill="both", expand=True, padx=(8, 0))
+        kr = tk.Frame(rc, bg=T["face"])
+        kr.pack(fill="x", pady=(0, 4))
+        self.kind_var = tk.StringVar(value=self.kind)
+        for k, spec in KINDS.items():
+            tk.Radiobutton(kr, text=spec["noun"].capitalize(), variable=self.kind_var, value=k, indicatoron=0,
+                           command=self._set_kind, bg=T["face"], fg=T["ink"], activebackground=T["face"],
+                           selectcolor=T["field"], font=UI, bd=2, padx=12, cursor="hand2").pack(side="left")
+        tf = tk.Frame(rc, bg=GRID_BG, relief="sunken", bd=2)
+        tf.pack(fill="both", expand=True)
+        g = KINDS["grid"]
+        self.canvas = tk.Canvas(tf, bg=GRID_BG, width=g["cols"] * (g["w"] + 12) + 12, height=2 * (g["h"] + 12) + 12,
                                 highlightthickness=0)
         self.canvas.pack()
 
@@ -127,8 +147,9 @@ class MetadataDialog(tk.Toplevel):
             self.app.settings.data["art_source"] = name
             self.app.settings.save()
         self.gen += 1
-        self.results, self.grids, self.infos, self.page = [], [], {}, 0
-        self.chosen = self.custom["url"] if self.custom else None
+        self.results, self.infos, self.page = [], {}, 0
+        for k in KINDS:
+            self._reset_kind(k)
         self.res_list.delete(0, "end")
         self._render()
         self._show_preview(None)
@@ -194,7 +215,10 @@ class MetadataDialog(tk.Toplevel):
         r = self._selected()
         if not r:
             return
-        self._load_grids(r["id"])
+        for k in KINDS:
+            if self.loaded[k] != r["id"]:
+                self._reset_kind(k)
+        self._load_images(self.kind, r["id"])
         self._load_info(r)
 
     # ---------------------------------------------------------- game info
@@ -238,29 +262,55 @@ class MetadataDialog(tk.Toplevel):
         else:
             self.official_chk.pack_forget()
 
-    # -------------------------------------------------------------- covers
-    def _load_grids(self, gid):
-        self.status.configure(text="Loading covers…")
+    # ------------------------------------------------------ covers & banners
+    def _reset_kind(self, k):
+        self.imgs[k], self.loaded[k] = [], None
+        self.chosen[k] = self.custom[k]["url"] if self.custom[k] else None
+
+    def _set_kind(self):
+        self.kind, self.page = self.kind_var.get(), 0
+        r = self._selected()
+        if r and self.loaded[self.kind] != r["id"]:
+            self._load_images(self.kind, r["id"])
+        else:
+            self._image_status()
+        self._render()
+
+    def _load_images(self, k, gid):
+        self.loaded[k] = gid
+        self.status.configure(text=f"Loading {KINDS[k]['noun']}s…")
 
         def work():
-            grids = self.api.images("grids", gid)[:24]
-            for gr in grids:
+            imgs = self.api.images(KINDS[k]["api"], gid)[:24]
+            for im in imgs:
                 try:
-                    gr["_file"] = str(images.fetch(gr.get("thumb") or gr["url"]))
+                    im["_file"] = str(images.fetch(im.get("thumb") or im["url"]))
                 except Exception:
-                    gr["_file"] = None
-            return grids
-        self._bg(work, self._show_grids)
+                    im["_file"] = None
+            return imgs
 
-    def _show_grids(self, grids):
-        self.grids, self.page = grids, 0
-        self.chosen = self.custom["url"] if self.custom else grids[0]["url"] if grids else None
-        self._render()
-        self.status.configure(text=f"{len(grids)} cover(s). Click one to choose it." if grids
-                              else "No covers for this game — the hero banner and logo will still be used.")
+        def done(imgs):
+            if self.loaded[k] != gid:       # another game was picked meanwhile
+                return
+            self.imgs[k] = imgs
+            self.chosen[k] = self.custom[k]["url"] if self.custom[k] else imgs[0]["url"] if imgs else None
+            if k == self.kind:
+                self.page = 0
+                self._render()
+                self._image_status()
+        self._bg(work, done)
+
+    def _image_status(self):
+        noun, other = KINDS[self.kind]["noun"], "banner" if self.kind == "grid" else "cover"
+        n = len(self.imgs[self.kind])
+        if not self._selected():
+            return
+        self.status.configure(text=f"{n} {noun}(s). Click one to choose it." if n
+                              else f"No {noun}s for this game — the {other} and logo will still be used.")
 
     def pick_file(self):
-        p = filedialog.askopenfilename(parent=self, title=f"Cover image for {self.game}",
+        k, noun = self.kind, KINDS[self.kind]["noun"]
+        p = filedialog.askopenfilename(parent=self, title=f"{noun.capitalize()} image for {self.game}",
                                        filetypes=[("Images", "*.png *.jpg *.jpeg *.webp *.bmp *.gif"),
                                                   ("All files", "*.*")])
         if not p:
@@ -274,14 +324,15 @@ class MetadataDialog(tk.Toplevel):
         except Exception as ex:
             self.status.configure(text=f"Can't use that image: {ex}")
             return
-        self.custom = {"url": ident, "_file": str(images.cache_path(ident))}
-        self.chosen, self.page = ident, 0
+        self.custom[k] = {"url": ident, "_file": str(images.cache_path(ident))}
+        self.chosen[k], self.page = ident, 0
         self._render()
-        self.status.configure(text="Your image is the cover. The banner and logo come from the game picked "
-                                   "on the left, if any.")
+        self.status.configure(text=f"Your image is the {noun}. Anything you don't pick comes from the game "
+                                   "chosen on the left, if any.")
 
     def _tiles(self):
-        return ([self.custom] if self.custom else []) + self.grids
+        k = self.kind
+        return ([self.custom[k]] if self.custom[k] else []) + self.imgs[k]
 
     def _turn(self, d):
         tiles = self._tiles()
@@ -293,18 +344,22 @@ class MetadataDialog(tk.Toplevel):
         c = self.canvas
         c.delete("all")
         self.thumbs = []
-        for i, gr in enumerate(self._tiles()[self.page * 8:self.page * 8 + 8]):
-            x, y = 12 + (i % 4) * (self.TW + 12), 12 + (i // 4) * (self.TH + 12)
+        spec = KINDS[self.kind]
+        tw, th, cols = spec["w"], spec["h"], spec["cols"]
+        for i, im in enumerate(self._tiles()[self.page * 8:self.page * 8 + 8]):
+            x, y = 12 + (i % cols) * (tw + 12), 12 + (i // cols) * (th + 12)
             if theme_art is not None:
-                ph = ImageTk.PhotoImage(theme_art.cover_tile(gr.get("_file"), self.TW, self.TH, self.game))
+                tile = (theme_art.cover_tile(im.get("_file"), tw, th, self.game) if self.kind == "grid"
+                        else theme_art.banner_tile(im.get("_file"), tw, th))
+                ph = ImageTk.PhotoImage(tile)
                 self.thumbs.append(ph)
                 c.create_image(x, y, image=ph, anchor="nw", tags=f"g{i}")
-            if gr["url"] == self.chosen:
-                c.create_rectangle(x - 4, y - 4, x + self.TW + 3, y + self.TH + 3, outline="#ffe27a", width=3)
-            c.tag_bind(f"g{i}", "<Button-1>", lambda e, u=gr["url"]: self._choose(u))
+            if im["url"] == self.chosen[self.kind]:
+                c.create_rectangle(x - 4, y - 4, x + tw + 3, y + th + 3, outline="#ffe27a", width=3)
+            c.tag_bind(f"g{i}", "<Button-1>", lambda e, u=im["url"]: self._choose(u))
 
     def _choose(self, url):
-        self.chosen = url
+        self.chosen[self.kind] = url
         self._render()
 
     # ------------------------------------------------------------- finish
@@ -314,7 +369,7 @@ class MetadataDialog(tk.Toplevel):
 
     def apply(self):
         r = self._selected()
-        custom = images.is_custom(self.chosen or "")
+        custom = {k: v for k, v in self.chosen.items() if images.is_custom(v or "")}
         if not r and not custom:
             if self.add:
                 self._skip()
@@ -323,10 +378,10 @@ class MetadataDialog(tk.Toplevel):
         self.status.configure(text="Getting banner and logo…" if r else "Saving…")
 
         def build():
-            if not r:            # own cover only, nothing to look up: keep the current banner/logo
+            if not r:            # own images only, nothing to look up: keep the rest of the current art
                 keep = {} if self.add else {k: v for k, v in self.app.art_info(self.game).items() if k != "none"}
-                return dict(keep, grid=self.chosen), None
-            art = self.api.art_for(r["id"], r.get("name", ""), self.chosen)
+                return dict(keep, **custom), None
+            art = self.api.art_for(r["id"], r.get("name", ""), self.chosen["grid"], self.chosen["hero"])
             info = self.infos.get(r["id"])
             if info is None and self.info_api:
                 info = self.info_api.fetch(self.game, r["id"])
