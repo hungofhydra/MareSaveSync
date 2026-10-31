@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from tkinter import messagebox
 
 from ..core.diff import EXCLUDED, baseline
 from ..core.sync import execute_plan, make_plan
@@ -23,15 +22,13 @@ class SyncMixin:
             roots = self._roots(game, res[0])
             missing = [p for p in roots.values() if p and not Path(p).is_dir()]
             if direction == "up" and missing:
-                messagebox.showerror("Sync up", "The save folder does not exist:\n" + "\n".join(missing),
-                                     parent=self)
+                self.tell("Sync up", "The save folder does not exist:\n" + "\n".join(missing), "error")
                 return
             plan = make_plan(self.diff, direction, self.mirror_var.get())
             if plan.empty:
-                messagebox.showinfo("SaveSync", "Already in sync — nothing to do.", parent=self)
+                self.tell("SaveSync", "Already in sync — nothing to do.")
                 return
-            if not messagebox.askyesno(f"Sync {direction}", self._plan_text(game, plan),
-                                       icon="warning" if plan.at_risk else "question", parent=self):
+            if not self.confirm(f"Sync {direction}", self._plan_text(game, plan), warn=bool(plan.at_risk)):
                 return
             self.run_bg(f"Syncing {direction}", lambda: self._do_sync(game, roots, plan),
                         lambda r: self._after_sync(game, direction, r))
@@ -87,4 +84,4 @@ class SyncMixin:
         msg = f"Sync {direction} finished."
         if backup:
             msg += f"\n\nBackup of replaced local files:\n{backup}"
-        messagebox.showinfo("SaveSync", msg, parent=self)
+        self.tell("SaveSync", msg)

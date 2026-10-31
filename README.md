@@ -25,6 +25,30 @@ A small game launcher that keeps your saves and playtime in sync across PCs thro
 - Turn off “Sync automatically” in the Game tab for games you want to sync by hand.
 - Achievements are not synced
 
+## Fullscreen mode (handheld PCs)
+
+A full-screen view made for an Xbox controller, like Steam Big Picture — for the ROG Ally, Legion Go and
+other Windows handhelds (their built-in controls count as an Xbox controller).
+
+- Open it with **View → Fullscreen mode**, **F11**, or Settings → Fullscreen mode → **Open Fullscreen mode**.
+  Tick **Start in Fullscreen mode** (off by default) to always start in it, or start the app with `--fullscreen`.
+- The selected game's art fills the screen and the library is a row of covers below it, most recently played
+  first. **A** opens a game (Play, Sync up, Sync down, Check saves), **X** plays it, **LB / RB** page through the
+  covers, **☰** opens the menu (Desktop mode, Exit, …), **B** goes back. The keyboard works too (arrows,
+  Enter, Esc, Tab for the menu), and so do touch and the mouse.
+- Save conflicts and sync questions appear inside fullscreen mode, so you answer them with the controller.
+- Fullscreen mode stays open behind the game while you play and comes back to the front when it closes.
+- Adding games, choosing save folders and settings are done in desktop mode (☰ → Desktop mode).
+
+**AnyFSE** (use it as the home app of the Xbox full screen experience): in AnyFSE's settings choose a
+**Custom** launcher, pick `MareSaveSync.exe`, and give it the argument `--fullscreen`. Settings →
+Fullscreen mode shows the exact path and has a Copy button. AnyFSE finds the app by its window, and its
+_exit full screen experience when the launcher closes_ option works when you choose ☰ → Exit.
+
+Only one copy of the app runs at a time. Starting it again (from AnyFSE, a shortcut, …) brings the copy that is
+already running — for example the one waiting in the tray after **Start with Windows** — to the front;
+with `--fullscreen` it switches to fullscreen mode.
+
 ## Install (each PC)
 
 **Easiest:** copy the `MareSaveSync` folder to each PC — a USB stick works too — and double-click
@@ -74,6 +98,7 @@ app.py                  entry point (python app.py)
 mss/
   paths.py              assets, exe/source folder, local data folder
   launcher.py           start a game and wait for it to close; start with Windows
+  instance.py           one copy at a time: a second start hands over to the running one
   core/                 no GUI: scan.py, excludes.py, diff.py, sync.py, compare.py, playtime.py, settings.py
   storage/              cloud backends: folder.py, gdrive.py (+ oauth_client.py reading .env), common.py
   providers/            online services: sgdb.py (SteamGridDB API), steam.py (Steam store details)
@@ -82,6 +107,7 @@ mss/
   ui/
     app.py              main window, built from mixins:
     library.py  details.py  play.py  sync.py  artwork.py  info.py (About tab)
+    fullscreen.py       fullscreen mode (controller UI); gamepad.py reads the Xbox controller (XInput)
     theme.py  widgets.py  theme_art.py (banner/icon drawing)
     dialogs/            settings, metadata (game info & artwork picker), conflict, remove, diff_window
 ```

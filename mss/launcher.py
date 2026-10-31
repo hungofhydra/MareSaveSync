@@ -160,12 +160,18 @@ class GameSession(threading.Thread):
 
 
 # ------------------------------------------------------------- start with Windows
-def startup_command() -> str:
+def app_command() -> tuple[str, list[str]]:
+    """The program that starts this app, and the arguments it needs before ours (app.py, from source)."""
     if FROZEN:
-        return f'"{sys.executable}" --minimized'
+        return sys.executable, []
     pyw = Path(sys.executable).with_name("pythonw.exe")
     py = pyw if pyw.is_file() else Path(sys.executable)
-    return f'"{py}" "{SOURCE_ROOT / "app.py"}" --minimized'
+    return str(py), [str(SOURCE_ROOT / "app.py")]
+
+
+def startup_command() -> str:
+    exe, args = app_command()
+    return " ".join(f'"{a}"' for a in [exe, *args]) + " --minimized"
 
 
 def get_startup() -> bool:

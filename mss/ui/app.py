@@ -10,7 +10,7 @@ import traceback
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-from .. import APP_TITLE, VERSION, storage
+from .. import APP_TITLE, VERSION, instance, storage
 from ..core import folders
 from ..core.diff import EXCLUDED, SAME, auto_direction, compute_diff
 from ..core.playtime import aggregate_stats
@@ -19,6 +19,7 @@ from .. import launcher
 from ..paths import ASSETS, PortableError, app_dir
 from .artwork import ArtworkMixin
 from .details import DetailsMixin
+from .fullscreen import FullscreenMixin
 from .dialogs.settings import SettingsDialog
 from .info import InfoMixin
 from .library import LibraryMixin
@@ -35,8 +36,9 @@ except Exception:            # Pillow missing: plain gradient banner, no mascot 
     ImageTk = theme_art = None
 
 
-class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMixin, TrayMixin, tk.Tk):
-    def __init__(self, start_minimized=False):
+class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMixin, FullscreenMixin, TrayMixin,
+          tk.Tk):
+    def __init__(self, start_minimized=False, start_fullscreen=False):
         super().__init__()
         self.title(APP_TITLE)
         self.geometry("1360x900")
@@ -72,6 +74,8 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
         self._tile_games: dict = {}
         self._jobs: dict = {}
         self._banner_img = self._mascot_img = self._hero_img = None
+        self.fs_on = False                      # fullscreen mode (ui/fullscreen.py) is showing
+        self._fs_prompts: list = []             # questions open in it, innermost last
 
         self._style()
         self._build()
@@ -82,6 +86,9 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
         threading.Thread(target=self._watch_games, daemon=True).start()
         self.after(100, self._poll)
         self.after(300, self.connect)
+        self.bind("<F11>", lambda e: self.toggle_fullscreen())
+        if start_fullscreen or self.settings.data.get("start_fullscreen"):
+            self.enter_fullscreen()
         if start_minimized:
             self.minimize()
 
@@ -153,6 +160,7 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
         for name, items in (("File", [("Add game…", self.new_game), ("Settings…", self.open_settings),
                                       None, ("Exit", self.destroy)]),
                             ("View", [("Library", self.show_library), ("Refresh library", self.reload_games),
+                                      ("Fullscreen mode   F11", self.enter_fullscreen),
                                       None, ("Open backups folder", self.open_backups)]),
                             ("Help", [("About Mare Save Sync", self.about)])):
             m = menu(self)
@@ -216,6 +224,7 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
 
     def _tick(self):
         self.clock.configure(text=time.strftime("%I:%M %p").lstrip("0"))
+        self._fs_refresh()
         self.after(15000, self._tick)
 
     def _start_menu(self):
@@ -227,6 +236,7 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
             for g in recent:
                 m.add_command(label=f"▶  {g}", command=lambda g=g: self.play(g))
         m.add_separator()
+        m.add_command(label="Fullscreen mode", command=self.enter_fullscreen)
         m.add_command(label="Settings…", command=self.open_settings)
         m.add_command(label="Open backups folder", command=self.open_backups)
         m.add_command(label="About Mare Save Sync", command=self.about)
@@ -295,11 +305,13 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
     def note(self, msg):
         self.log(msg)
         self.status.configure(text=msg if len(msg) < 60 else msg[:57] + "…")
+        if self.fs_on:
+            self._fs_toast(msg)
         self.after(6000, lambda: self.status.configure(text="Ready") if not self.busy else None)
 
     def run_bg(self, label_, fn, done=None, failed=None):
         if self.busy:
-            messagebox.showinfo(APP_TITLE, "Please wait for the current task to finish.", parent=self)
+            self.tell(APP_TITLE, "Please wait for the current task to finish.")
             return
         self._set_busy(True, label_)
 
@@ -333,6 +345,13 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
                     self._on_game_detected(item[1], item[2])
                 elif kind == "game_end":
                     self._on_game_end(*item[1:])
+                elif kind == "pad":
+                    self._fs_input(item[1])
+                    continue                    # fullscreen mode has redrawn already
+                elif kind == "fsbg":
+                    self._fs_bg_ready(item[1], item[2])
+                elif kind == "instance":
+                    self._on_instance(item[1])
                 elif kind == "done":
                     self._set_busy(False)
                     if item[1]:
@@ -349,12 +368,14 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
                     if failed:
                         failed(ex)
                     else:
-                        messagebox.showerror(f"{label_} failed", str(ex), parent=self)
+                        self.tell(f"{label_} failed", str(ex), "error")
                     if label_ == "Connecting" and self.backend is None:
                         if self.settings.data.get("backend") == "gdrive":
                             self._show_signed_out()
                         else:
                             self._set_backend_desc("Not connected")
+                if kind != "log":
+                    self._fs_refresh()
         except queue.Empty:
             pass
         self.after(100, self._poll)
@@ -364,6 +385,7 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
         self.status.configure(text=f"{label_}…" if busy else "Ready")
         self.configure(cursor="watch" if busy else "")
         self._update_controls()
+        self._fs_refresh()
 
     def _update_controls(self):
         connected = self.backend is not None and not self.busy
@@ -476,6 +498,13 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
     def open_settings(self, first_run=False):
         SettingsDialog(self, first_run)
 
+    def _on_instance(self, msg):
+        """Mare Save Sync was started again (see instance.py): show this one instead."""
+        if msg in ("show", "fullscreen"):
+            self.show_window()
+        if msg == "fullscreen":
+            self.enter_fullscreen()
+
 
 def main():
     if WIN:
@@ -493,5 +522,11 @@ def main():
         messagebox.showerror(APP_TITLE, str(ex), parent=root)
         root.destroy()
         return
+    fullscreen = "--fullscreen" in sys.argv   # e.g. started by AnyFSE as the full screen experience's home app
+    minimized = "--minimized" in sys.argv and not fullscreen
+    if instance.send("fullscreen" if fullscreen else "" if minimized else "show"):
+        return                                 # it's already running and has been asked to show itself
     launcher.refresh_startup()                 # the folder may have moved since "Start with Windows" was set
-    App(start_minimized="--minimized" in sys.argv).mainloop()
+    app = App(start_minimized=minimized, start_fullscreen=fullscreen)
+    instance.serve(lambda msg: app.q.put(("instance", msg)))
+    app.mainloop()

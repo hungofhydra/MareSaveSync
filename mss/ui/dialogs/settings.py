@@ -30,6 +30,7 @@ class SettingsDialog(tk.Toplevel):
         self.mascot_icon = tk.BooleanVar(value=s.get("mascot_icon", False))
         self.key = tk.StringVar(value=s.get("sgdb_key", ""))
         self.startup = tk.BooleanVar(value=launcher.get_startup())
+        self.start_fs = tk.BooleanVar(value=s.get("start_fullscreen", False))
 
         bar = TitleBar(self, "Welcome to Mare Save Sync" if first_run else "Settings", app.icon16)
         bar.pack(fill="x", padx=2, pady=2)
@@ -94,6 +95,23 @@ class SettingsDialog(tk.Toplevel):
         check(ap, "Also use it as the window and taskbar icon", self.mascot_icon).pack(anchor="w", pady=(6, 0))
         Btn(ap, "Apply appearance", self._apply_appearance).pack(anchor="e", pady=(6, 0))
 
+        fs = group(right, "Fullscreen mode")
+        label(fs, "A full-screen view for handheld PCs, made for an Xbox controller\n"
+                  "(like Steam Big Picture). F11 switches it on and off.", justify="left").pack(anchor="w", pady=(0, 6))
+        check(fs, "Start in Fullscreen mode", self.start_fs, self._save_start_fs).pack(anchor="w")
+        exe, args = launcher.app_command()
+        args = " ".join(f'"{a}"' for a in args + ["--fullscreen"]).replace('"--fullscreen"', "--fullscreen")
+        label(fs, f"AnyFSE: choose a Custom launcher with this program and the\nargument  {args}",
+              muted=True, justify="left", wraplength=380).pack(anchor="w", pady=(6, 2))
+        row = tk.Frame(fs, bg=T["face"])
+        row.pack(fill="x")
+        e = tk.Entry(row, width=30, **app._field(row))
+        e.insert(0, exe)
+        e.configure(state="readonly", readonlybackground=T["field"])
+        e.pack(side="left", fill="x", expand=True)
+        Btn(row, "Copy", lambda: (self.clipboard_clear(), self.clipboard_append(exe))).pack(side="left", padx=(6, 0))
+        Btn(fs, "Open Fullscreen mode", self._open_fullscreen, kind="default").pack(anchor="e", pady=(8, 0))
+
         Btn(right, "Close", self.destroy, padx=18).pack(anchor="e", side="bottom")
         self.grab_set()
 
@@ -103,6 +121,14 @@ class SettingsDialog(tk.Toplevel):
         except OSError as ex:
             self.startup.set(False)
             messagebox.showerror("Startup", str(ex), parent=self)
+
+    def _save_start_fs(self):
+        self.app.settings.data["start_fullscreen"] = self.start_fs.get()
+        self.app.settings.save()
+
+    def _open_fullscreen(self):
+        self.destroy()
+        self.app.enter_fullscreen()
 
     def _save_key(self):
         self.app.settings.data["sgdb_key"] = self.key.get().strip()

@@ -9,7 +9,7 @@ import math
 import random
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 from ..paths import ASSETS
 
@@ -187,6 +187,25 @@ def cover_tile(path, w: int, h: int, title: str) -> Image.Image:
         except Exception:
             pass
     return placeholder_cover(w, h, title)
+
+
+def fs_background(hero_path, w: int, h: int) -> Image.Image:
+    """Fullscreen mode's backdrop: the game's hero art (or the night sky) filling the screen, darkened on the
+    left, at the top and along the bottom so the text and the shelf of covers stay readable."""
+    img = None
+    if hero_path:
+        try:
+            img = ImageOps.fit(Image.open(hero_path).convert("RGB"), (w, h), Image.LANCZOS, centering=(0.5, 0.3))
+        except Exception:
+            img = None
+    if img is None:
+        img = night_sky(w, h)
+    grad = Image.linear_gradient("L")                                # 256x256, 0 at the top → 255 at the bottom
+    left = grad.rotate(90).point(lambda v: int(max(30, 250 - v * 1.1)))   # strong on the left, light on the right
+    bottom = grad.point(lambda v: int(max(0, v - 120) * 1.75))       # the lower half fades to dark
+    top = grad.point(lambda v: int(max(0, 70 - v) * 2.6))            # a little shade behind the top bar
+    mask = ImageChops.lighter(ImageChops.lighter(left, bottom), top).resize((w, h), Image.BILINEAR)
+    return Image.composite(Image.new("RGB", (w, h), (6, 8, 30)), img, mask)
 
 
 def banner_tile(path, w: int, h: int) -> Image.Image:
