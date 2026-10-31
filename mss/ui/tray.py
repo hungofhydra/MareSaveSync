@@ -44,6 +44,9 @@ class TrayMixin:
         self.deiconify()
         self.lift()
         self.focus_force()
+        if self.fs_on:                      # Windows forgets fullscreen while the window is hidden
+            self.attributes("-fullscreen", True)
+            self._fs_c.focus_set()
 
     def notify(self, text):
         """A Windows notification from the tray icon (does nothing without one)."""

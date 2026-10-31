@@ -3,13 +3,12 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from tkinter import filedialog, messagebox
+from tkinter import filedialog
 
 from .. import APP_TITLE, launcher
 from ..core.diff import auto_direction
 from ..core.playtime import aggregate_stats, fmt_play_long
 from ..core.sync import make_plan
-from .dialogs.conflict import ConflictDialog
 
 
 class PlayMixin:
@@ -58,9 +57,8 @@ class PlayMixin:
 
     def play_current(self):
         if self.game in self.sessions:
-            if messagebox.askyesno(APP_TITLE, f"{self.game} is still being tracked.\n\nHas the game closed? "
-                                   "Choose Yes to stop tracking now (playtime is saved and saves are uploaded).",
-                                   parent=self):
+            if self.confirm(APP_TITLE, f"{self.game} is still being tracked.\n\nHas the game closed? "
+                            "Choose Yes to stop tracking now (playtime is saved and saves are uploaded)."):
                 self.sessions[self.game].stop_tracking()
             return
         self.play(self.game)
@@ -89,13 +87,13 @@ class PlayMixin:
         exe = gs.get("exe")
         if not exe or not Path(exe).exists():
             if exe:
-                messagebox.showwarning(APP_TITLE, f"The executable for {g} wasn't found:\n{exe}", parent=self)
+                self.tell(APP_TITLE, f"The executable for {g} wasn't found:\n{exe}", "warning")
             if not self.pick_exe(g):
                 return
         if gs.get("local_path") and gs.get("auto_sync", True):
             if self.backend is None:
-                if not messagebox.askyesno(APP_TITLE, "Not connected to the cloud, so saves can't be synced.\n\n"
-                                           "Play anyway?", parent=self):
+                if not self.confirm(APP_TITLE, "Not connected to the cloud, so saves can't be synced.\n\n"
+                                    "Play anyway?"):
                     return
                 self._launch(g)
             else:
@@ -105,7 +103,8 @@ class PlayMixin:
 
     def _launch(self, g):
         self._start_session(g)
-        self.after(400, self.minimize)
+        if not self.fs_on:          # fullscreen mode stays up behind the game, like a console's home screen
+            self.after(400, self.minimize)
 
     def _start_session(self, g, attach_started=None):
         gs = self.settings.game(g)
@@ -155,9 +154,11 @@ class PlayMixin:
             self.task_game.pack_forget()
         else:
             self.task_game.configure(text=f"▶ {', '.join(self.sessions)}")
+        if self.fs_on and not self.sessions:
+            self.show_window()      # back to fullscreen mode when the game closes
         if err:
             self.show_window()
-            messagebox.showerror(APP_TITLE, f"Couldn't start {g}:\n{err}", parent=self)
+            self.tell(APP_TITLE, f"Couldn't start {g}:\n{err}", "error")
         else:
             self._add_playtime(g, seconds)
             self.note(f"{g} closed — played {fmt_play_long(seconds)}")
@@ -176,12 +177,11 @@ class PlayMixin:
         def failed(ex):
             if moment == "before":
                 self.show_window()
-                then(messagebox.askyesno(APP_TITLE, f"Couldn't check the cloud saves for {g}:\n{ex}\n\n"
-                                         "Play anyway?", parent=self))
+                then(self.confirm(APP_TITLE, f"Couldn't check the cloud saves for {g}:\n{ex}\n\nPlay anyway?"))
             else:
                 self.show_window()
-                messagebox.showwarning(APP_TITLE, f"Couldn't upload the saves for {g}:\n{ex}\n\n"
-                                       "Open the game and press Sync up when you're back online.", parent=self)
+                self.tell(APP_TITLE, f"Couldn't upload the saves for {g}:\n{ex}\n\n"
+                          "Open the game and press Sync up when you're back online.", "warning")
                 then(False)
 
         def checked(res):
@@ -198,7 +198,7 @@ class PlayMixin:
             if direction == "ask":
                 self._set_state(g, "conflict")
                 self.show_window()
-                choice = ConflictDialog(self, g, diff, moment).result
+                choice = self.ask_conflict(g, diff, moment)
                 if choice == "cancel":
                     then(False)
                     return

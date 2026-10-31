@@ -15,7 +15,7 @@ class Settings:
         self.path = Path(path) if path else app_dir() / "config.json"
         self.data = {"backend": None, "credentials_path": "", "folder_root": "",
                      "mirror_deletes": True, "games": {}, "sgdb_key": "", "my_stats": {},
-                     "device_id": "", "device_name": ""}
+                     "device_id": "", "device_name": "", "start_fullscreen": False}
         if self.path.is_file():
             try:
                 self.data.update(json.loads(self.path.read_text("utf-8")))
