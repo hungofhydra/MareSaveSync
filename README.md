@@ -9,6 +9,8 @@ A small game launcher that keeps your saves and playtime in sync across PCs thro
 3. **Add game** opens a picker after you type the name: choose which game it is (its official name and
    description are previewed, and you can use the official name in the library) and click a cover. **Skip**
    adds it with the first search result picked automatically. Games added before you set a key get that too.
+   The description comes from the game's Steam store page; games that aren't on Steam (Epic exclusives,
+   console games you run in an emulator, …) get the one from their Wikipedia article.
 4. To change it later: right-click a cover → **Game info & artwork…** — or click **Use image from file…**
    there to use your own picture as the cover.
 5. The artwork and its images are saved in the cloud in the game's `art/` folder, so every PC shows the

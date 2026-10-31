@@ -40,10 +40,14 @@ class InfoMixin:
                 src = sources.SOURCES.get(self.settings.data.get("info_source", sources.DEFAULT),
                                           sources.SOURCES[sources.DEFAULT])
                 key = self.settings.data.get(src.key_setting)
-                if key and (force or info is None):
-                    sgdb_id = (self.art_info(g) or {}).get("sgdb_id")     # same game the artwork came from
+                # stored by an older version without a description: try again once (it may find one now)
+                outdated = info is not None and not info.get("description") \
+                    and info.get("v", 1) < sources.INFO_VERSION
+                if key and (force or info is None or outdated):
+                    sgdb_id = ((outdated and info.get("sgdb_id"))           # the game picked for its info,
+                               or (self.art_info(g) or {}).get("sgdb_id"))  # else the one the artwork came from
                     try:
-                        info = src.make(key).fetch(g, sgdb_id) or {"none": True}
+                        info = src.make(key).fetch(g, sgdb_id) or {"none": True, "v": sources.INFO_VERSION}
                         b.write_info(g, info)
                     except sgdb.SGDBError as ex:
                         self.log_ts(f"Game info for {g}: {ex}")
