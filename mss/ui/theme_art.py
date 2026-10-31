@@ -189,6 +189,15 @@ def cover_tile(path, w: int, h: int, title: str) -> Image.Image:
     return placeholder_cover(w, h, title)
 
 
+def banner_tile(path, w: int, h: int) -> Image.Image:
+    if path:
+        try:
+            return ImageOps.fit(Image.open(path).convert("RGB"), (w, h), Image.LANCZOS, centering=(0.5, 0.35))
+        except Exception:
+            pass
+    return night_sky(w, h)
+
+
 def hero_image(hero_path, logo_path, w: int, h: int, title: str, bar: int = 62) -> Image.Image:
     """Wide banner for the details page: hero art (or night sky), the logo, and a dark bar at the bottom."""
     img = None

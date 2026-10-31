@@ -55,11 +55,13 @@ class SGDB:
     def images(self, kind: str, game_id: int) -> list[dict]:
         return self._get(f"/{kind}/game/{game_id}", PARAMS[kind])
 
-    def art_for(self, game_id: int, name: str = "", grid_url: str | None = None) -> dict:
+    def art_for(self, game_id: int, name: str = "", grid_url: str | None = None,
+                hero_url: str | None = None) -> dict:
         art = {"sgdb_id": game_id, "sgdb_name": name}
+        picked = {"grid": grid_url, "hero": hero_url}
         for kind, key in (("grids", "grid"), ("heroes", "hero"), ("logos", "logo")):
-            if key == "grid" and grid_url:
-                art[key] = grid_url
+            if picked.get(key):
+                art[key] = picked[key]
                 continue
             imgs = self.images(kind, game_id)
             art[key] = imgs[0]["url"] if imgs else ""

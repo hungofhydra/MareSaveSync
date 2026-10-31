@@ -3,7 +3,7 @@ rem Builds the portable app: dist\MareSaveSync\ holds MareSaveSync.exe, its runt
 rem has run, its data\ folder (settings, sign-in, cached covers, backups). Copy that whole folder anywhere.
 rem The build itself is in build.py (the GitHub release workflow uses it too).
 cd /d "%~dp0"
-set PY=py -3
+set PY=python
 if exist .venv\Scripts\python.exe set PY=.venv\Scripts\python.exe
 %PY% -m pip install --upgrade pyinstaller -r requirements.txt || goto :err
 %PY% build.py || goto :err
