@@ -10,7 +10,7 @@ import traceback
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-from .. import APP_TITLE, instance, storage, updater
+from .. import APP_TITLE, applog, instance, storage, updater
 from ..core import folders
 from ..core.diff import auto_direction, compute_diff
 from ..core.playtime import aggregate_stats
@@ -171,7 +171,7 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
                             ("View", [("Library", self.show_library), ("Refresh library", self.reload_games),
                                       ("Fullscreen mode   F11", self.enter_fullscreen),
                                       None, ("Open backups folder", self.open_backups)]),
-                            ("Help", [("Check for updates…", self.check_updates_now),
+                            ("Help", [("Log…", self.open_log), ("Check for updates…", self.check_updates_now),
                                       ("About Mare Save Sync", self.about)])):
             m = menu(self)
             for it in items:
@@ -298,6 +298,14 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
         d.mkdir(exist_ok=True)
         open_in_explorer(d)
 
+    def open_log(self):
+        from .dialogs.log_window import LogWindow
+        if getattr(self, "_log_win", None) is not None and self._log_win.winfo_exists():
+            self._log_win.reload()
+            self._log_win.lift()
+        else:
+            self._log_win = LogWindow(self)
+
     def about(self):
         messagebox.showinfo(f"About {APP_TITLE}", f"{APP_TITLE}  {updater.current_text()}\n\n"
                             "A small game launcher that keeps your saves and playtime in sync across PCs "
@@ -307,10 +315,21 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
     _backend_desc = "Not connected"
 
     def log(self, msg: str):
+        applog.log.info(msg)
+        self._show_log_line(msg)
+
+    def _show_log_line(self, msg: str):
+        """Only in this session's Log tab (the log file has it already, or gets more detail)."""
         self.log_txt.configure(state="normal")
         self.log_txt.insert("end", f"{time.strftime('%H:%M:%S')}  {msg}\n")
         self.log_txt.see("end")
         self.log_txt.configure(state="disabled")
+
+    def report_callback_exception(self, exc, val, tb):
+        """An error in a Tk callback (a button, a timer, …): to the log file, which the windowed exe can show."""
+        applog.log.error("Unexpected error", exc_info=(exc, val, tb))
+        self._show_log_line(f"Unexpected error: {val}  (details in the log: Help → Log…)")
+        super().report_callback_exception(exc, val, tb)
 
     def log_ts(self, msg: str):
         self.q.put(("log", msg))
@@ -387,12 +406,13 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
                             item[1](item[2])
                         except Exception as ex:
                             self.log(f"Error: {ex}")
-                            traceback.print_exc()
+                            applog.log.error("Error after a background task", exc_info=True)
                 else:
                     _, label_, ex, tb, failed = item
                     self._set_busy(False)
                     print(tb, file=sys.stderr)
-                    self.log(f"{label_} failed: {ex}")
+                    applog.log.error(f"{label_} failed:\n{tb.rstrip()}")
+                    self._show_log_line(f"{label_} failed: {ex}")
                     if failed:
                         failed(ex)
                     else:
@@ -563,7 +583,8 @@ def main():
     minimized = "--minimized" in sys.argv and not fullscreen
     if instance.send("fullscreen" if fullscreen else "" if minimized else "show"):
         return                                 # it's already running and has been asked to show itself
-    launcher.refresh_startup()                 # the folder may have moved since "Start with Windows" was set
+    applog.setup()                             # only the running copy writes the log file
+    launcher.refresh_startup()                # the folder may have moved since "Start with Windows" was set
     threading.Timer(15, updater.cleanup).start()   # after an update: the updater may still be closing
     app = App(start_minimized=minimized, start_fullscreen=fullscreen)
     instance.serve(lambda msg: app.q.put(("instance", msg)))

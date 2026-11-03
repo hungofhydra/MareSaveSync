@@ -37,7 +37,8 @@ def serve(on_message) -> None:
         tmp.write_text(json.dumps({"port": srv.getsockname()[1], "token": token, "pid": os.getpid()}), "utf-8")
         os.replace(tmp, _file())
     except OSError as ex:
-        print(f"Single-instance check unavailable: {ex}")
+        from .applog import log
+        log.warning(f"Single-instance check unavailable: {ex}")
         return
 
     def loop():

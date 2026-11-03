@@ -163,6 +163,11 @@ class DetailsMixin:
         self.log_txt.configure(yscrollcommand=lsb.set)
         self.log_txt.pack(side="left", fill="both", expand=True)
         lsb.pack(side="right", fill="y")
+        lb = tk.Frame(lt, bg=T["face"])
+        lb.pack(fill="x", pady=(6, 0))
+        label(lb, "This session only. The full log, kept across restarts, is in Help → Log…", muted=True).pack(
+            side="left")
+        Btn(lb, "Open full log…", self.open_log).pack(side="right")
         return f
 
     def _draw_hero(self):
