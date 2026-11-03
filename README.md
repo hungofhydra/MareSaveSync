@@ -35,12 +35,19 @@ other Windows handhelds (their built-in controls count as an Xbox controller).
 - Open it with **View → Fullscreen mode**, **F11**, or Settings → Fullscreen mode → **Open Fullscreen mode**.
   Tick **Start in Fullscreen mode** (off by default) to always start in it, or start the app with `--fullscreen`.
 - The selected game's art fills the screen and the library is a row of covers below it, most recently played
-  first (☰ → **Sort** changes the order). **A** opens a game (Play, Sync up, Sync down, Check saves), **X** plays it, **LB / RB** page through the
-  covers, **☰** opens the menu (Desktop mode, Exit, …), **B** goes back. The keyboard works too (arrows,
-  Enter, Esc, Tab for the menu), and so do touch and the mouse.
+  first (☰ → **Sort** changes the order). **A** opens a game (Play, Sync up, Sync down, Check saves), **X** plays
+  it, **Y** searches the library, **LB / RB** page through the covers, **☰** opens the menu (Add game, Desktop
+  mode, Exit, …), **B** goes back or clears the search. The keyboard works too (arrows, Enter, Esc, Tab for the
+  menu), and so do touch and the mouse.
+- **Add game** (☰) works with the controller: type the name on the on-screen keyboard (**A** types, **X**
+  deletes, **Y** is a space, **LB** is Shift, **☰** is Done), pick which game it is (needs a SteamGridDB key, see
+  Cover art), pick its program from where Steam, the Epic Games Launcher or GOG installed it, and confirm the
+  save folder that was found. Anything you skip can be done later. A game with no .exe set offers the same
+  programs when you press Play, and one with no save folder has **Find save folder** on its page.
 - Save conflicts and sync questions appear inside fullscreen mode, so you answer them with the controller.
 - Fullscreen mode stays open behind the game while you play and comes back to the front when it closes.
-- Adding games, choosing save folders and settings are done in desktop mode (☰ → Desktop mode).
+- Extra save folders, exclusions and settings are done in desktop mode (☰ → Desktop mode), as is choosing a
+  game's .exe or save folder by hand.
 
 **AnyFSE** (use it as the home app of the Xbox full screen experience): in AnyFSE's settings choose a
 **Custom** launcher, pick `MareSaveSync.exe`, and give it the argument `--fullscreen`. Settings →
@@ -114,7 +121,8 @@ mss/
   updater.py            check GitHub releases, download an update and swap it in (--finish-update)
   instance.py           one copy at a time: a second start hands over to the running one
   core/                 no GUI: scan.py, excludes.py, diff.py, sync.py, compare.py, playtime.py, settings.py,
-                        folders.py, savepaths.py (paths that work on every PC), detect.py (finding save folders)
+                        folders.py, savepaths.py (paths that work on every PC), detect.py (finding save folders),
+                        installs.py (where Steam / Epic / GOG installed a game, and its .exe)
   storage/              cloud backends: folder.py, gdrive.py (+ oauth_client.py reading .env), common.py
   providers/            online services: sgdb.py (SteamGridDB API), steam.py (Steam store details),
                         wikipedia.py, ludusavi.py (Ludusavi's list of save locations)
@@ -125,6 +133,7 @@ mss/
     library.py  details.py  play.py  sync.py  artwork.py  info.py (About tab)  savefind.py (finding save folders)
     update.py           the Update button, Help → Check for updates…
     fullscreen.py       fullscreen mode (controller UI); gamepad.py reads the Xbox controller (XInput)
+    fs_keyboard.py      the on-screen keyboard;  fs_add.py  Add game in fullscreen mode
     theme.py  widgets.py  theme_art.py (banner/icon drawing)
     dialogs/            settings, metadata (game info & artwork picker), conflict, remove, diff_window
 ```

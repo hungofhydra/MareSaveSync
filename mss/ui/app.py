@@ -28,6 +28,8 @@ from .savefind import SaveFindMixin
 from .sync import CHECK_EVERY_MS, SyncMixin
 from .theme import SMALL, UI, UIB, WIN, T
 from .tray import TrayMixin
+from .fs_add import FsAddMixin
+from .fs_keyboard import FsKeyboardMixin
 from .update import UpdateMixin
 from .widgets import Btn, _mix, label, load_photo, menu, open_in_explorer, sunken_label, window
 
@@ -39,7 +41,7 @@ except Exception:            # Pillow missing: plain gradient banner, no mascot 
 
 
 class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMixin, SaveFindMixin, FullscreenMixin,
-          TrayMixin, UpdateMixin, tk.Tk):
+          FsKeyboardMixin, FsAddMixin, TrayMixin, UpdateMixin, tk.Tk):
     def __init__(self, start_minimized=False, start_fullscreen=False):
         super().__init__()
         self.title(APP_TITLE)
@@ -340,6 +342,9 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
             fn()
 
     def _poll(self):
+        # Scheduled first: a handler may wait for an answer to a fullscreen question, and the controller's
+        # presses that answer it arrive through this queue (they'd never be read if this waited for it).
+        self.after(100, self._poll)
         try:
             while True:
                 item = self.q.get_nowait()
@@ -401,7 +406,6 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
                     self._fs_refresh()
         except queue.Empty:
             pass
-        self.after(100, self._poll)
 
     def _set_busy(self, busy, label_=""):
         self.busy = busy

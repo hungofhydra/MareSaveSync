@@ -2,9 +2,10 @@
 Xbox full screen experience.
 
 Home fills the screen with the selected game's art and shows the library as a shelf of covers along the bottom.
-A opens a game's page (Play, Sync up, Sync down, Check saves), X plays straight away, ☰ opens the menu and
-LB / RB page through the shelf. It works with an Xbox controller (gamepad.py), the keyboard (arrows, Enter,
-Esc, Tab for the menu) and touch or mouse. Adding games, folders and settings stay in desktop mode.
+A opens a game's page (Play, Sync up, Sync down, Check saves), X plays straight away, Y searches, ☰ opens the
+menu (Add game, …) and LB / RB page through the shelf. It works with an Xbox controller (gamepad.py), the
+keyboard (arrows, Enter, Esc, Tab for the menu) and touch or mouse. Text is typed with fs_keyboard.py and games
+are added with fs_add.py; extra save folders, exclusions and settings stay in desktop mode.
 
 Open it with --fullscreen (what AnyFSE runs), View → Fullscreen mode, F11, or "Start in Fullscreen mode".
 Questions asked while it's open (conflicts, sync confirmations, errors) appear inside it so the controller
@@ -15,6 +16,7 @@ from __future__ import annotations
 import threading
 import time
 import tkinter as tk
+from pathlib import Path
 from tkinter import font as tkfont
 from tkinter import messagebox
 
@@ -44,7 +46,7 @@ FS = dict(bg="#06081e", panel="#0c1030", card="#151a3c", line="#2e3670", button=
 PAD_COLORS = {"a": "#3fae2a", "b": "#d6392f", "x": "#2f7bd6", "y": "#e0aa1e"}
 FAMILY = ("Segoe UI", "Segoe UI Semibold") if WIN else ("Helvetica", "Helvetica")
 KEYS = {"Left": "left", "Right": "right", "Up": "up", "Down": "down", "Return": "a", "KP_Enter": "a",
-        "space": "a", "Escape": "b", "BackSpace": "b", "x": "x", "Tab": "start", "F10": "start",
+        "space": "a", "Escape": "b", "BackSpace": "b", "x": "x", "y": "y", "Tab": "start", "F10": "start",
         "Prior": "lb", "Next": "rb"}
 if WIN:
     KEYS["App"] = "start"                       # the keyboard's menu key
@@ -97,7 +99,8 @@ class FullscreenMixin:
         self._fs_hwnd = 0
         c.bind("<Configure>", lambda e: self._debounce("fs", 60, self._fs_render))
         for key, b in KEYS.items():
-            c.bind(f"<KeyPress-{key}>", lambda e, b=b: (self._fs_input(b), "break")[1])
+            c.bind(f"<KeyPress-{key}>", lambda e, b=b: self._fs_key(e, b))
+        c.bind("<KeyPress>", lambda e: self._fs_key(e, None))     # typing into the on-screen keyboard
         c.bind("<MouseWheel>", lambda e: self._fs_input("left" if e.delta > 0 else "right"))
         c.bind("<Motion>", lambda e: c.cget("cursor") == "none" and c.configure(cursor="arrow"))
 
@@ -182,6 +185,9 @@ class FullscreenMixin:
         self._fs_c.configure(cursor="none")   # steering with the controller: hide the mouse pointer
         if self._fs_prompts:
             pr = self._fs_prompts[-1]
+            if pr.get("kind") == "keyboard":
+                self._kb_input(pr, b)
+                return
             n = len(pr["choices"])
             if b in ("up", "left"):
                 pr["focus"] = (pr["focus"] - 1) % n
@@ -215,6 +221,14 @@ class FullscreenMixin:
             self._fs_menu = 0
             self._fs_render()
             return
+        if self._fs_view != "game":
+            if b == "y" and self.all_games:
+                self.after_idle(self._fs_search)
+                return
+            if b == "b" and self._fs_query:
+                self._fs_query = ""
+                self._fs_render()
+                return
         games = self._fs_games()
         g = self._fs_focus
         if g not in games:
@@ -245,9 +259,22 @@ class FullscreenMixin:
                 self._fs_play(g)
         self._fs_render()
 
+    _fs_query = ""                          # what the library is searched for (Y), "" for all games
+
     def _fs_games(self):
-        """The library, most recently played first unless another order was chosen in the ☰ menu."""
-        return sorted(self.all_games, key=self.sort_key(self.settings.data.get("fs_sort", "last_played")))
+        """The library (or the games matching the search), most recently played first unless another order was
+        chosen in the ☰ menu."""
+        q = self._fs_query.lower()
+        games = [g for g in self.all_games
+                 if q in g.lower() or q in (self.game_info(g).get("name") or "").lower()] if q else self.all_games
+        return sorted(games, key=self.sort_key(self.settings.data.get("fs_sort", "last_played")))
+
+    def _fs_search(self):
+        q = self.fs_type("Search the library", self._fs_query, "Type part of a game's name.")
+        if q is not None:
+            self._fs_query = q
+            self._fs_view = "home"
+            self._fs_render()
 
     def _fs_next_sort(self):
         keys = list(SORTS)
@@ -271,10 +298,13 @@ class FullscreenMixin:
         gs = self.settings.data["games"].get(g, {})
         playing = g in self.sessions
         can_sync = self.backend is not None and bool(gs.get("local_path")) and not playing
+        if self.backend is not None and not gs.get("local_path"):
+            last = ("⌕  Find save folder", lambda: self.when_idle(lambda: self.find_saves(g, explicit=True)), True)
+        else:
+            last = ("↻  Check saves", lambda: self._fs_sync(g, None), can_sync)
         return [("■  Stop tracking" if playing else "▶  Play", lambda: self._fs_play(g), True),
                 ("▲  Sync up", lambda: self._fs_sync(g, "up"), can_sync),
-                ("▼  Sync down", lambda: self._fs_sync(g, "down"), can_sync),
-                ("↻  Check saves", lambda: self._fs_sync(g, None), can_sync)]
+                ("▼  Sync down", lambda: self._fs_sync(g, "down"), can_sync), last]
 
     def _fs_play(self, g):
         if g in self.sessions:
@@ -283,6 +313,8 @@ class FullscreenMixin:
                 self.sessions[g].stop_tracking()
         elif self.busy:
             self._fs_toast("Please wait for the current task to finish.")
+        elif not Path(self.settings.data["games"].get(g, {}).get("exe") or "").is_file():
+            self.fs_set_exe(g, lambda ok: ok and self.when_idle(lambda: self.play(g)))   # no file browser here
         else:
             self.play(g)
 
@@ -298,7 +330,9 @@ class FullscreenMixin:
     def _fs_menu_items(self):
         items = [("Resume", lambda: None)]
         if self.backend is not None:
-            items.append(("Refresh library", self.reload_games))
+            items += [("Add game", self.fs_add_game), ("Refresh library", self.reload_games)]
+        if self.all_games:
+            items.append(("Search", self._fs_search))
         elif self.settings.data.get("backend") == "gdrive":
             items.append(("Sign in with Google", lambda: self.connect(interactive=True)))
         else:
@@ -442,7 +476,8 @@ class FullscreenMixin:
         if self._fs_menu is not None:
             self._fs_draw_menu(W, H)
         if self._fs_prompts:
-            self._fs_draw_prompt(self._fs_prompts[-1], W, H)
+            pr = self._fs_prompts[-1]
+            (self._kb_draw if pr.get("kind") == "keyboard" else self._fs_draw_prompt)(pr, W, H)
 
     def _fs_rrect(self, x1, y1, x2, y2, r, **kw):
         r = max(1, min(r, (x2 - x1) // 2, (y2 - y1) // 2))
@@ -594,8 +629,10 @@ class FullscreenMixin:
         if i >= self._fs_start + n:
             self._fs_start = i - n + 1
         start = self._fs_start
-        c.create_text(x0, top - p(40), text=f"LIBRARY   ·   {len(games)} game{'s' if len(games) != 1 else ''}",
-                      anchor="w", fill=FS["sub"], font=self._fs_font(16, semi=True))
+        n_text = f"{len(games)} game{'s' if len(games) != 1 else ''}"
+        title = (f"SEARCH  “{self._fs_query}”   ·   {len(games)} of {len(self.all_games)} games" if self._fs_query
+                 else f"LIBRARY   ·   {n_text}")
+        c.create_text(x0, top - p(40), text=title, anchor="w", fill=FS["sub"], font=self._fs_font(16, semi=True))
         if start > 0:
             c.create_text(x0 - p(30), top + th // 2, text="◀", fill=FS["sub"], font=self._fs_font(22))
         if start + n < len(games):
@@ -657,7 +694,7 @@ class FullscreenMixin:
         if g in self.sessions:
             hint = "Saves are uploaded automatically when the game closes."
         elif not gs.get("local_path"):
-            hint = "To sync this game's saves, choose its save folder in desktop mode (☰ → Desktop mode)."
+            hint = "Its save folder isn't set on this PC: choose Find save folder (or set it in desktop mode)."
         elif self.backend is None:
             hint = "Not connected to the cloud — sign in from the menu (☰)."
         elif gs.get("last_sync"):
@@ -672,9 +709,12 @@ class FullscreenMixin:
             title = "Connecting…" if self.busy else "Not connected"
             text = ("Open the menu (☰) to sign in or connect. Storage is set up in desktop mode → Settings."
                     if not self.busy else "")
+        elif self._fs_query:
+            title = f"No games match “{self._fs_query}”"
+            text = "Press Y to search again, or B to see all your games."
         else:
             title = "Your library is empty"
-            text = "Add games in desktop mode: open the menu (☰) and choose Desktop mode."
+            text = "Open the menu (☰) and choose Add game."
         c.create_text(W // 2, H // 2 - p(30), text=title, fill=FS["ink"], font=self._fs_font(44, bold=True))
         c.create_text(W // 2, H // 2 + p(36), text=text, fill=FS["sub"], font=self._fs_font(20), width=W * 0.6,
                       justify="center")
@@ -689,16 +729,20 @@ class FullscreenMixin:
         if self.busy or (status and status != "Ready"):
             c.create_text(p(56), y, text=("⟳  " if self.busy else "") + status, anchor="w", fill=FS["sub"],
                           font=self._fs_font(18))
-        if self._fs_prompts:
+        if self._fs_prompts and self._fs_prompts[-1].get("kind") == "keyboard":
+            hints = [("a", "Type"), ("x", "Delete"), ("y", "Space"), ("lb", "Shift"), ("start", "Done"),
+                     ("b", "Cancel")]
+        elif self._fs_prompts:
             hints = [("a", "Select"), ("b", "Cancel")]
         elif self._fs_menu is not None:
             hints = [("a", "Select"), ("b", "Close")]
         elif self._fs_focus is None:
-            hints = [("start", "Menu")]
+            hints = ([("y", "Search"), ("b", "Clear search")] if self._fs_query else []) + [("start", "Menu")]
         elif self._fs_view == "game":
             hints = [("a", "Select"), ("x", "Play"), ("b", "Back"), ("start", "Menu")]
         else:
-            hints = [("a", "Open"), ("x", "Play"), ("lb rb", "Page"), ("start", "Menu")]
+            hints = [("a", "Open"), ("x", "Play"), ("y", "Search")] + (
+                [("b", "Clear search")] if self._fs_query else [("lb rb", "Page")]) + [("start", "Menu")]
         x = W - p(56)
         for b, text in reversed(hints):
             t = c.create_text(x, y, text=text, anchor="e", fill=FS["ink"], font=self._fs_font(18))
