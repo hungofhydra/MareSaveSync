@@ -224,6 +224,12 @@ class FullscreenMixin:
         if self._fs_view == "stats":
             self._fs_stats_input(b)
             return
+        if self._fs_view == "settings":
+            self._fs_settings_input(b)
+            return
+        if self._fs_view == "files":
+            self._fs_files_input(b)
+            return
         if self._fs_view != "game":
             if b == "y" and self.all_games:
                 self.after_idle(self._fs_search)
@@ -307,7 +313,8 @@ class FullscreenMixin:
             last = ("↻  Check saves", lambda: self._fs_sync(g, None), can_sync)
         return [("■  Stop tracking" if playing else "▶  Play", lambda: self._fs_play(g), True),
                 ("▲  Sync up", lambda: self._fs_sync(g, "up"), can_sync),
-                ("▼  Sync down", lambda: self._fs_sync(g, "down"), can_sync), last]
+                ("▼  Sync down", lambda: self._fs_sync(g, "down"), can_sync), last,
+                ("⋯  More", lambda: self.after_idle(lambda: self.fs_game_more(g)), True)]
 
     def _fs_play(self, g):
         if g in self.sessions:
@@ -345,7 +352,8 @@ class FullscreenMixin:
                       self._fs_next_sort))
         if self.update_info:
             items.append((f"Update to {self.update_info['tag']}", self.install_update))
-        return items + [("Desktop mode", self.leave_fullscreen), (f"Exit {APP_TITLE}", self._fs_exit)]
+        return items + [("Settings", self.fs_open_settings), ("Desktop mode", self.leave_fullscreen),
+                        (f"Exit {APP_TITLE}", self._fs_exit)]
 
     def _fs_exit(self):
         if self.sessions and not self.confirm(
@@ -462,7 +470,7 @@ class FullscreenMixin:
         if self._fs_focus not in games:
             self._fs_focus = games[0] if games else None
         g = self._fs_focus
-        if g is None and self._fs_view != "stats":
+        if g is None and self._fs_view not in ("stats", "settings"):
             self._fs_view = "home"
         bg = self._fs_bg(g, W, H)
         if bg is not None:
@@ -470,6 +478,10 @@ class FullscreenMixin:
         self._fs_topbar(W)
         if self._fs_view == "stats":
             self._fs_stats_page(W, H)
+        elif self._fs_view == "settings":
+            self._fs_settings_page(W, H)
+        elif self._fs_view == "files":
+            self._fs_files_page(W, H)
         elif g is None:
             self._fs_empty(W, H)
         elif self._fs_view == "game":
@@ -752,6 +764,10 @@ class FullscreenMixin:
             hints = [("a", "Select"), ("b", "Close")]
         elif self._fs_view == "stats":
             hints = [("left right", "Week"), ("b", "Back"), ("start", "Menu")]
+        elif self._fs_view == "settings":
+            hints = [("a", "Change"), ("b", "Back"), ("start", "Menu")]
+        elif self._fs_view == "files":
+            hints = [("a", "Details"), ("x", "Compare again"), ("lb rb", "Page"), ("b", "Back")]
         elif self._fs_focus is None:
             hints = ([("y", "Search"), ("b", "Clear search")] if self._fs_query else []) + [("start", "Menu")]
         elif self._fs_view == "game":
