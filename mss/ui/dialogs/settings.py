@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from tkinter import filedialog, messagebox
 
-from ... import APP_TITLE, launcher, storage
+from ... import APP_TITLE, launcher, storage, updater
 from ...paths import app_dir
 from ..theme import UIB, T
 from ..widgets import Btn, TitleBar, check, label
@@ -31,6 +31,7 @@ class SettingsDialog(tk.Toplevel):
         self.key = tk.StringVar(value=s.get("sgdb_key", ""))
         self.startup = tk.BooleanVar(value=launcher.get_startup())
         self.start_fs = tk.BooleanVar(value=s.get("start_fullscreen", False))
+        self.check_updates = tk.BooleanVar(value=s.get("check_updates", True))
 
         bar = TitleBar(self, "Welcome to Mare Save Sync" if first_run else "Settings", app.icon16)
         bar.pack(fill="x", padx=2, pady=2)
@@ -75,6 +76,12 @@ class SettingsDialog(tk.Toplevel):
 
         st = group(left, "Startup")
         check(st, "Start Mare Save Sync with Windows (minimized)", self.startup, self._toggle_startup).pack(anchor="w")
+
+        up = group(left, "Updates")
+        label(up, f"This is {APP_TITLE} {updater.current_text()}.").pack(anchor="w", pady=(0, 4))
+        check(up, "Check for updates automatically (you're asked before installing)", self.check_updates,
+              self._save_check_updates).pack(anchor="w")
+        Btn(up, "Check now", self._check_now).pack(anchor="w", pady=(6, 0))
 
         a = group(right, "Artwork (SteamGridDB)")
         label(a, "Covers and banners come from SteamGridDB. Get a free API key:\n"
@@ -121,6 +128,14 @@ class SettingsDialog(tk.Toplevel):
         except OSError as ex:
             self.startup.set(False)
             messagebox.showerror("Startup", str(ex), parent=self)
+
+    def _save_check_updates(self):
+        self.app.settings.data["check_updates"] = self.check_updates.get()
+        self.app.settings.save()
+
+    def _check_now(self):
+        self.destroy()
+        self.app.check_updates_now()
 
     def _save_start_fs(self):
         self.app.settings.data["start_fullscreen"] = self.start_fs.get()

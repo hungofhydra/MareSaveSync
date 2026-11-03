@@ -49,6 +49,8 @@ jobs:
           }
 
       - name: Build
+        env:
+          MSS_BUILD: ${{ github.run_number }}     # the exe knows its release (v<version>.<run>) to update itself
         run: python build.py
 
       - name: Zip

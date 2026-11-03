@@ -296,6 +296,8 @@ class FullscreenMixin:
             items.append(("Sign in with Google", lambda: self.connect(interactive=True)))
         else:
             items.append(("Connect", self.connect))
+        if self.update_info:
+            items.append((f"Update to {self.update_info['tag']}", self.install_update))
         return items + [("Desktop mode", self.leave_fullscreen), (f"Exit {APP_TITLE}", self._fs_exit)]
 
     def _fs_exit(self):

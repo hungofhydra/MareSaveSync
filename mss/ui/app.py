@@ -10,7 +10,7 @@ import traceback
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-from .. import APP_TITLE, VERSION, instance, storage
+from .. import APP_TITLE, instance, storage, updater
 from ..core import folders
 from ..core.diff import EXCLUDED, SAME, auto_direction, compute_diff
 from ..core.playtime import aggregate_stats
@@ -28,6 +28,7 @@ from .savefind import SaveFindMixin
 from .sync import SyncMixin
 from .theme import SMALL, UI, UIB, WIN, T
 from .tray import TrayMixin
+from .update import UpdateMixin
 from .widgets import Btn, _mix, label, load_photo, menu, open_in_explorer, sunken_label, window
 
 try:
@@ -38,7 +39,7 @@ except Exception:            # Pillow missing: plain gradient banner, no mascot 
 
 
 class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMixin, SaveFindMixin, FullscreenMixin,
-          TrayMixin, tk.Tk):
+          TrayMixin, UpdateMixin, tk.Tk):
     def __init__(self, start_minimized=False, start_fullscreen=False):
         super().__init__()
         self.title(APP_TITLE)
@@ -87,6 +88,7 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
         threading.Thread(target=self._watch_games, daemon=True).start()
         self.after(100, self._poll)
         self.after(300, self.connect)
+        self.after(5000, self._auto_check_updates)
         self.bind("<F11>", lambda e: self.toggle_fullscreen())
         if start_fullscreen or self.settings.data.get("start_fullscreen"):
             self.enter_fullscreen()
@@ -163,7 +165,8 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
                             ("View", [("Library", self.show_library), ("Refresh library", self.reload_games),
                                       ("Fullscreen mode   F11", self.enter_fullscreen),
                                       None, ("Open backups folder", self.open_backups)]),
-                            ("Help", [("About Mare Save Sync", self.about)])):
+                            ("Help", [("Check for updates…", self.check_updates_now),
+                                      ("About Mare Save Sync", self.about)])):
             m = menu(self)
             for it in items:
                 if it is None:
@@ -200,6 +203,7 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
         self.settings_btn = Btn(st, "Settings…", self.open_settings)
         self.settings_btn.pack(side="right", padx=(4, 0))
         self.signin_btn = Btn(st, "Sign in with Google", lambda: self.connect(interactive=True), kind="default")
+        self.update_btn = Btn(st, "Update", self.install_update, kind="default")    # shown when one is found
 
         lw, self.lib_title, lbody = window(content, "Library", self.icon16)
         lw.pack(fill="both", expand=True, pady=(12, 0))
@@ -240,6 +244,8 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
         m.add_command(label="Fullscreen mode", command=self.enter_fullscreen)
         m.add_command(label="Settings…", command=self.open_settings)
         m.add_command(label="Open backups folder", command=self.open_backups)
+        if self.update_info:
+            m.add_command(label=f"Update to {self.update_info['tag']}…", command=self.install_update)
         m.add_command(label="About Mare Save Sync", command=self.about)
         m.add_separator()
         m.add_command(label="Exit", command=self.destroy)
@@ -287,7 +293,7 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
         open_in_explorer(d)
 
     def about(self):
-        messagebox.showinfo(f"About {APP_TITLE}", f"{APP_TITLE}  v{VERSION}\n\n"
+        messagebox.showinfo(f"About {APP_TITLE}", f"{APP_TITLE}  {updater.current_text()}\n\n"
                             "A small game launcher that keeps your saves and playtime in sync across PCs "
                             "through Google Drive.\n\nCover art: SteamGridDB.\n"
                             "Title font: Pixelify Sans (SIL Open Font License).", parent=self)
@@ -348,6 +354,12 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
                     self._on_game_end(*item[1:])
                 elif kind == "folders_found":
                     self._adopt_folders(item[1], item[2])
+                elif kind == "update":
+                    self._on_update_info(item[1])
+                elif kind == "status":
+                    if self.busy:
+                        self.status.configure(text=item[1])
+                    continue
                 elif kind == "pad":
                     self._fs_input(item[1])
                     continue                    # fullscreen mode has redrawn already
@@ -510,6 +522,10 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
 
 
 def main():
+    if updater.FINISH in sys.argv:             # this is a new version finishing its own update (see updater.py)
+        i = sys.argv.index(updater.FINISH)
+        updater.finish(sys.argv[i + 1:])
+        return
     if WIN:
         try:
             import ctypes
@@ -530,6 +546,7 @@ def main():
     if instance.send("fullscreen" if fullscreen else "" if minimized else "show"):
         return                                 # it's already running and has been asked to show itself
     launcher.refresh_startup()                 # the folder may have moved since "Start with Windows" was set
+    threading.Timer(15, updater.cleanup).start()   # after an update: the updater may still be closing
     app = App(start_minimized=minimized, start_fullscreen=fullscreen)
     instance.serve(lambda msg: app.q.put(("instance", msg)))
     app.mainloop()
