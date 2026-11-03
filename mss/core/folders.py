@@ -4,15 +4,51 @@ The first (main) folder is the root of the game's cloud saves, as in older versi
 stored under its own top-level cloud folder "@<id>/". The list of extra folders ({"id", "name"}) is kept in
 the game's cloud config so every PC knows it; where each folder is on this PC is in this PC's settings
 (the main one in "local_path", the extra ones in "folders": {id: path}).
+
+Any of them can be a single file instead (an emulator's .srm in a folder shared by all its games). Then the
+config says which name the file has in the cloud ("main_file", or "file" in the extra folder's entry), so each PC
+can call it what it likes, and local_roots() gives a FileRoot for it.
 """
 from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
 
-from .scan import FileInfo, scan_folder
+from .scan import FileInfo, scan_file, scan_folder
 
 MAIN = ""                # id of the main folder
+
+
+class FileRoot(str):
+    """A save location that's one file: its path, plus the name it has in the cloud."""
+
+    cloud_name: str
+
+    def __new__(cls, path, cloud_name):
+        s = super().__new__(cls, path)
+        s.cloud_name = cloud_name
+        return s
+
+
+def is_file_root(p) -> bool:
+    return isinstance(p, FileRoot)
+
+
+def file_name(cfg, fid) -> str | None:
+    """The cloud name of a save location that's a single file, None for a folder."""
+    if fid == MAIN:
+        return (cfg or {}).get("main_file") or None
+    return next((f.get("file") for f in extra_folders(cfg) if f["id"] == fid), None) or None
+
+
+def set_file_name(cfg, fid, name) -> None:
+    """Make a save location a single file (its cloud name), or a folder again (name None)."""
+    holder = cfg if fid == MAIN else next(f for f in extra_folders(cfg) if f["id"] == fid)
+    key = "main_file" if fid == MAIN else "file"
+    if name:
+        holder[key] = name
+    else:
+        holder.pop(key, None)
 
 
 def extra_folders(cfg) -> list[dict]:
@@ -31,7 +67,12 @@ def new_id(cfg) -> str:
 def local_roots(gs: dict, cfg) -> dict[str, str | None]:
     """{folder id: path on this PC or None} for the main folder and every extra folder of the game."""
     paths = gs.get("folders") or {}
-    return {MAIN: gs.get("local_path") or None, **{f["id"]: paths.get(f["id"]) or None for f in extra_folders(cfg)}}
+    roots = {MAIN: gs.get("local_path") or None, **{f["id"]: paths.get(f["id"]) or None for f in extra_folders(cfg)}}
+    for fid, p in roots.items():
+        name = file_name(cfg, fid)
+        if p and name:
+            roots[fid] = FileRoot(p, name)
+    return roots
 
 
 def unset_prefixes(gs: dict, cfg) -> dict[str, str]:
@@ -53,6 +94,11 @@ def scan_local(roots: dict, errors: list | None = None) -> dict[str, FileInfo]:
         if not path:
             continue
         pre = cloud_prefix(fid)
+        if is_file_root(path):
+            fi = scan_file(path, pre + path.cloud_name, errors)
+            if fi:
+                out[fi.path] = fi
+            continue
         for rel, fi in scan_folder(path, errors).items():
             out[pre + rel] = replace(fi, path=pre + rel) if pre else fi
     return out
@@ -61,8 +107,21 @@ def scan_local(roots: dict, errors: list | None = None) -> dict[str, FileInfo]:
 def local_file(roots: dict, rel: str) -> tuple[Path, Path]:
     """(folder root, file) on this PC for a cloud path. The folder must be set on this PC."""
     fid = folder_of(rel, roots)
-    root = Path(roots[fid])
-    return root, root / rel[len(cloud_prefix(fid)):]
+    root = roots[fid]
+    if is_file_root(root):
+        return Path(root).parent, Path(root)
+    return Path(root), Path(root) / rel[len(cloud_prefix(fid)):]
+
+
+def stray_in_file_roots(cloud: dict, roots: dict) -> set[str]:
+    """Cloud paths in a single-file save location's area other than its file (left from when it was a folder).
+    They're left out of the comparison: syncing one down would overwrite the save file."""
+    files = {fid: cloud_prefix(fid) + p.cloud_name for fid, p in roots.items() if is_file_root(p)}
+    return {rel for rel in cloud if (fid := folder_of(rel, roots)) in files and rel != files[fid]}
+
+
+def root_exists(p) -> bool:
+    return bool(p) and (Path(p).is_file() if is_file_root(p) else Path(p).is_dir())
 
 
 def to_cloud_rel(roots: dict, path) -> str | None:

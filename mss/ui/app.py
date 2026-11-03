@@ -475,6 +475,9 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
 
     def _diff(self, g, cfg, local, cloud):
         gs = self.settings.data.get("games", {}).get(g, {})
+        stray = folders.stray_in_file_roots(cloud, self._roots(g, cfg))
+        if stray:
+            cloud = {r: f for r, f in cloud.items() if r not in stray}
         return compute_diff(local, cloud, cfg.get("excludes", []), gs.get("base", {}),
                             folders.unset_prefixes(gs, cfg))
 

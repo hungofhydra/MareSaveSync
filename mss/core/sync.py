@@ -9,7 +9,7 @@ from pathlib import Path
 
 from ..paths import app_dir
 from .diff import CHANGED, CLOUD_ONLY, LOCAL_ONLY
-from .folders import local_file
+from .folders import is_file_root, local_file
 from .util import prune_empty_dirs, safe_name
 
 
@@ -94,8 +94,8 @@ def execute_plan(plan: SyncPlan, backend, game: str, roots: dict, log=print):
             backend.delete(game, e.path)
     else:
         for root in roots.values():
-            if root:
-                Path(root).mkdir(parents=True, exist_ok=True)
+            if root:                    # a single-file save location: its folder
+                (Path(root).parent if is_file_root(root) else Path(root)).mkdir(parents=True, exist_ok=True)
         affected = [e.path for e in plan.transfer if e.local] + [e.path for e in plan.delete]
         backup = backup_files({r: local_file(roots, r)[1] for r in affected}, game)
         if backup:
