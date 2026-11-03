@@ -39,7 +39,7 @@ except ImportError:
 
 FS = dict(bg="#06081e", panel="#0c1030", card="#151a3c", line="#2e3670", button="#232a55", ink="#ffffff",
           sub="#c3c9ee", dim="#8088bf", focus="#ffffff", focus_ink="#0a0d26", glow="#7fb2ff",
-          green="#2f9e4f", amber="#b98010", red="#c8443a")
+          green="#2f9e4f", amber="#b98010", red="#c8443a", blue="#2f6fd6")
 PAD_COLORS = {"a": "#3fae2a", "b": "#d6392f", "x": "#2f7bd6", "y": "#e0aa1e"}
 FAMILY = ("Segoe UI", "Segoe UI Semibold") if WIN else ("Helvetica", "Helvetica")
 KEYS = {"Left": "left", "Right": "right", "Up": "up", "Down": "down", "Return": "a", "KP_Enter": "a",
@@ -513,8 +513,8 @@ class FullscreenMixin:
         if g in self.sessions:
             out.append(("▶  Playing now", FS["green"]))
         gs = self.settings.data["games"].get(g, {})
-        chip = {"synced": ("☁  Synced", FS["green"]), "changes": ("●  Not synced", FS["amber"]),
-                "conflict": ("⚠  Conflict", FS["red"])}.get(gs.get("state"))
+        chip = {"synced": ("✓  Synced", FS["green"]), "cloud_newer": ("☁  Cloud is newer", FS["blue"]),
+                "changes": ("▲  Not uploaded", FS["amber"]), "conflict": ("⚠  Conflict", FS["red"])}.get(gs.get("state"))
         if chip:
             out.append(chip)
         if not gs.get("exe"):

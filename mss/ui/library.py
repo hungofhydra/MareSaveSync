@@ -80,8 +80,10 @@ class LibraryMixin:
             self._chip(x + TILE_W - 4, y + 4, "✓ Synced", "#1d7a2e", anchor="ne", tags=tid)
         elif state == "conflict":
             self._chip(x + TILE_W - 4, y + 4, "⚠ Conflict", "#b3261e", anchor="ne", tags=tid)
+        elif state == "cloud_newer":
+            self._chip(x + TILE_W - 4, y + 4, "☁ Cloud is newer", "#1f4fbf", anchor="ne", tags=tid)
         elif state == "changes":
-            self._chip(x + TILE_W - 4, y + 4, "● Changes", "#8a5a00", anchor="ne", tags=tid)
+            self._chip(x + TILE_W - 4, y + 4, "▲ Not uploaded", "#8a5a00", anchor="ne", tags=tid)
         gs = self.settings.data["games"].get(g, {})
         ready = gs.get("local_path") or gs.get("exe")
         t = c.create_text(x + TILE_W / 2, y + TILE_H + 12, text=g, width=TILE_W + 14, justify="center",
@@ -150,6 +152,7 @@ class LibraryMixin:
             self._set_games(games)
             for g in games:
                 self.fetch_meta(g)
+            self.check_states()
         self.run_bg("Loading library", work, done)
 
     def new_game(self):

@@ -165,6 +165,10 @@ mss/
   _Exclude this file / folder / all \*.ext files_. Rules are stored with the game in the cloud, so every
   PC uses the same list. Excluded files are never uploaded, downloaded or deleted. Good first rules:
   `*.log`, `Player.log`, crash dumps, shader caches.
+- **Library badges** show where each game stands: _✓ Synced_, _☁ Cloud is newer_ (another PC uploaded newer saves:
+  Play or Sync down gets them), _▲ Not uploaded_ (this PC has saves the cloud doesn't) and _⚠ Conflict_ (both changed).
+  Every game is checked in the background after connecting, on Refresh, and every 30 minutes; a note says when
+  games have newer saves in the cloud. Save files that haven't changed aren't read again.
 - **Sync up / Sync down** always rescan first and show a confirmation with what will be uploaded,
   downloaded or deleted, and warn if you're about to overwrite progress made elsewhere.
 - **Mirror deletions** (on by default): makes the target exactly match the source. Turn it off to only
