@@ -499,7 +499,7 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
             else:
                 b = storage.FolderBackend(s.get("folder_root", ""))
             b = storage.Locked(b)
-            return b, b.describe(), b.list_games(), b.read_all_stats()
+            return b, b.describe(), self._list_games(b), b.read_all_stats()
 
         def done(res):
             self.backend, desc, games, stats = res

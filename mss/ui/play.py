@@ -29,6 +29,7 @@ class PlayMixin:
         others = [f for f in files if f.get("device_id") != dev]
         self.stats_all = aggregate_stats(others + [{"games": mine}])
         self.settings.save()
+        self.resort()
         if changed:
             self.when_idle(self._push_stats)
 
@@ -54,6 +55,7 @@ class PlayMixin:
         a["seconds"] += seconds
         a["last_played"] = now
         self.settings.save()
+        self.resort()
 
     def play_current(self):
         if self.game in self.sessions:
