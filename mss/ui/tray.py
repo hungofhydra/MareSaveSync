@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import threading
 
-from .. import APP_TITLE
+from .. import APP_TITLE, applog
 from ..paths import ASSETS
 
 try:
@@ -30,7 +30,7 @@ class TrayMixin:
             threading.Thread(target=self._tray.run, daemon=True).start()
         except Exception as ex:
             self._tray = None
-            print(f"No tray icon: {ex}")
+            applog.log.warning(f"No tray icon: {ex}")
         self.bind("<Unmap>", self._on_unmap)
 
     def minimize(self):

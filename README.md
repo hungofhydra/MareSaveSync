@@ -118,6 +118,7 @@ app.py                  entry point (python app.py)
 mss/
   paths.py              assets, exe/source folder, local data folder
   launcher.py           start a game and wait for it to close; start with Windows
+  applog.py             the log file (data\logs), tracebacks of errors, the bug report text
   updater.py            check GitHub releases, download an update and swap it in (--finish-update)
   instance.py           one copy at a time: a second start hands over to the running one
   core/                 no GUI: scan.py, excludes.py, diff.py, sync.py, compare.py, playtime.py, settings.py,
@@ -202,6 +203,9 @@ source — that folder keeps the original “SaveSync” name so existing settin
 - This PC's settings (which folder each game uses here, sync baseline): `data\config.json`
 - Google sign-in: `data\token.json` (Settings → Sign out removes it)
 - Cached cover art: `data\art\`; backups: `data\backups\`; the list of save locations: `data\ludusavi.json`
+- The log: `data\logs\MareSaveSync.log` (about the last 3 MB). **Help → Log…** shows it, with **Errors only**
+  and **Copy for bug report**, which copies the app and Windows versions, the storage type and the end of the
+  log with your user name taken out of paths. Paste that into a GitHub issue (**Report a problem on GitHub…**).
 - The only thing outside the folder: **Start with Windows** adds a registry entry pointing at the exe. It's
   updated when you start the moved app; turn it off before deleting the folder.
 - In the cloud, everything about a game is in its own folder `My Drive/MareSaveSync/<game>/`:
