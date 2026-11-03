@@ -101,14 +101,16 @@ mss/
   paths.py              assets, exe/source folder, local data folder
   launcher.py           start a game and wait for it to close; start with Windows
   instance.py           one copy at a time: a second start hands over to the running one
-  core/                 no GUI: scan.py, excludes.py, diff.py, sync.py, compare.py, playtime.py, settings.py
+  core/                 no GUI: scan.py, excludes.py, diff.py, sync.py, compare.py, playtime.py, settings.py,
+                        folders.py, savepaths.py (paths that work on every PC), detect.py (finding save folders)
   storage/              cloud backends: folder.py, gdrive.py (+ oauth_client.py reading .env), common.py
-  providers/            online services: sgdb.py (SteamGridDB API), steam.py (Steam store details)
+  providers/            online services: sgdb.py (SteamGridDB API), steam.py (Steam store details),
+                        wikipedia.py, ludusavi.py (Ludusavi's list of save locations)
   art/                  cover art: sources.py (registry), images.py (local cache)
   info/                 game info: sources.py (registry; SteamGridDB + Steam store)
   ui/
     app.py              main window, built from mixins:
-    library.py  details.py  play.py  sync.py  artwork.py  info.py (About tab)
+    library.py  details.py  play.py  sync.py  artwork.py  info.py (About tab)  savefind.py (finding save folders)
     fullscreen.py       fullscreen mode (controller UI); gamepad.py reads the Xbox controller (XInput)
     theme.py  widgets.py  theme_art.py (banner/icon drawing)
     dialogs/            settings, metadata (game info & artwork picker), conflict, remove, diff_window
@@ -123,9 +125,21 @@ mss/
 
 ## Using it
 
-- **Add game** → name it → choose the save folder and the .exe on this PC. _Choose folder → Type or paste a path_ accepts
-  things like `%USERPROFILE%\AppData\LocalLow\AcrobaticChirimenjako\SchrodingersCallAdv`
-  (AppData is hidden in the normal folder picker).
+- **Add game** → name it → choose the .exe on this PC. The save folder is then found automatically and you're asked
+  whether to use it. If it isn't found, choose it yourself: _Choose… → Type or paste a path_ accepts things like
+  `%USERPROFILE%\AppData\LocalLow\AcrobaticChirimenjako\SchrodingersCallAdv` (AppData is hidden in the normal
+  folder picker).
+- **Finding save folders automatically** uses [Ludusavi's list of save locations](https://github.com/mtkennerly/ludusavi-manifest)
+  (over 20,000 PC games, from PCGamingWiki). It's downloaded the first time it's needed (about 18 MB, once) and checked
+  for updates once a week. The game is matched by its Steam id, else its name; games kept in the install folder
+  are found through the game's .exe or your Steam libraries. Saves in the Windows registry, Steam Cloud's own
+  folder and Xbox app containers aren't synced. To look again later: Saves tab → _Choose… → Find automatically_.
+- **Every other PC finds the folder by itself.** When a save folder is under your user folder, AppData, Documents
+  or ProgramData, where it is gets stored with the game in the cloud (e.g.
+  `<home>/AppData/LocalLow/Team Cherry/Hollow Knight`), and other PCs use the same place in their own user folder:
+  opening the game or pressing Play there is enough. Folders elsewhere (like `D:\Games\…`) are chosen on each PC.
+  Press **Play** on a PC where the save folder isn't set yet and it's looked for first, so you start from the
+  saves in the cloud.
 - Game keeps saves in more than one place? **Saves** tab → **Add folder…** as many times as needed. Each
   extra folder is named once and every PC sees it; choose where it is on each PC. Until it's chosen on a
   PC, its files are left alone there. In the cloud each extra folder is stored under `@2/`, `@3/`, …;
@@ -158,11 +172,11 @@ source — that folder keeps the original “SaveSync” name so existing settin
 
 - This PC's settings (which folder each game uses here, sync baseline): `data\config.json`
 - Google sign-in: `data\token.json` (Settings → Sign out removes it)
-- Cached cover art: `data\art\`; backups: `data\backups\`
+- Cached cover art: `data\art\`; backups: `data\backups\`; the list of save locations: `data\ludusavi.json`
 - The only thing outside the folder: **Start with Windows** adds a registry entry pointing at the exe. It's
   updated when you start the moved app; turn it off before deleting the folder.
 - In the cloud, everything about a game is in its own folder `My Drive/MareSaveSync/<game>/`:
-  the save files, `savesync.json` (exclusions), `info.json` (name, description, …), `art/` (artwork choice +
+  the save files, `savesync.json` (exclusions, extra save folders, where the save folders are), `info.json` (name, description, …), `art/` (artwork choice +
   images) and `playtime/` (one file per PC).
   **Remove from library** only hides the folder; add the game again with the same name and its saves,
   playtime, artwork and exclusions come back. Tick **Purge all data** in that dialog to delete the whole

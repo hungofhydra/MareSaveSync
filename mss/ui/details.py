@@ -289,7 +289,7 @@ class DetailsMixin:
             r.pack(fill="x", pady=(0, 4))
             label(r, name, width=22, anchor="w").pack(side="left")
             text = (p if p and Path(p).is_dir() else f"{p}   (folder not found — Sync down will create it)" if p
-                    else "Not set on this PC — choose where this game keeps its saves" if not fid
+                    else "Not set on this PC — Choose… → Find automatically, or pick the folder yourself" if not fid
                     else "Not set on this PC — its files aren't synced here")
             tk.Label(r, text=text, bg=T["field"], fg=T["ink"], font=UI, relief="sunken", bd=2, anchor="w",
                      padx=4).pack(side="left", fill="x", expand=True, padx=6, ipady=1)
@@ -316,6 +316,8 @@ class DetailsMixin:
     def choose_folder_menu(self, fid, btn):
         m = tk.Menu(self, tearoff=0, bg=C["panel2"], fg=C["fg"], activebackground=C["sel"],
                     activeforeground=C["fg"])
+        if not fid:
+            m.add_command(label="Find automatically", command=lambda: self.find_saves(self.game, explicit=True))
         m.add_command(label="Browse…", command=lambda: self.browse_folder(fid))
         m.add_command(label="Type or paste a path…  (supports %USERPROFILE% etc.)",
                       command=lambda: self.type_folder(fid))
@@ -362,12 +364,13 @@ class DetailsMixin:
             if g.get("local_path") != d:
                 g["base"] = {}            # new folder → forget the previous sync baseline
             g["local_path"] = d
+        g.pop("find_declined", None)
         self.settings.save()
         self.log(f"{self.game}: save folder on this PC set to {d}")
         self._layout_grid()
         self._render_header()
         self._update_controls()
-        self.refresh_diff()
+        self.refresh_diff(share={fid: d})
 
     def add_folder(self):
         game = self.game
@@ -429,20 +432,34 @@ class DetailsMixin:
                 self.refresh_diff()
         self.run_bg("Removing folder", work, done)
 
-    def _scan(self, game):
+    def _scan(self, game, share=None):
+        """(cloud config, this PC's files, cloud files). Also shares where this PC's save folders are (`share`:
+        {folder id: path} just chosen here), and uses the places other PCs shared for folders not set here."""
         cfg = self.backend.get_game_config(game)
+        roots = self._roots(game, cfg)
+        found = self._shared_folders(game, cfg)
+        if found:
+            self.q.put(("folders_found", game, found))    # handled before this scan's result
+            roots.update(found)
+        changed = self._share_where(cfg, share or {})
+        changed = self._share_where(cfg, {f: p for f, p in roots.items() if p}, replace=False) or changed
+        if changed:                                       # also when set up before folders were shared
+            try:
+                self.backend.set_game_config(game, cfg)
+            except Exception as ex:
+                self.log_ts(f"{game}: couldn't share where the save folder is: {ex}")
         errors: list = []
-        local = folders.scan_local(self._roots(game, cfg), errors)
+        local = folders.scan_local(roots, errors)
         for e in errors:
             self.log_ts(f"Could not read {e}  (is the game still running?)")
         cloud = self.backend.list_files(game)
         return cfg, local, cloud
 
-    def refresh_diff(self):
+    def refresh_diff(self, share=None):
         if not self.game:
             return
         game = self.game
-        self.run_bg(f"Comparing {game}", lambda: self._scan(game),
+        self.run_bg(f"Comparing {game}", lambda: self._scan(game, share),
                     lambda r: self._apply_scan(game, r))
 
     def _apply_scan(self, game, res):

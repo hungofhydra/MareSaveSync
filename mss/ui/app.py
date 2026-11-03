@@ -24,6 +24,7 @@ from .dialogs.settings import SettingsDialog
 from .info import InfoMixin
 from .library import LibraryMixin
 from .play import PlayMixin
+from .savefind import SaveFindMixin
 from .sync import SyncMixin
 from .theme import SMALL, UI, UIB, WIN, T
 from .tray import TrayMixin
@@ -36,8 +37,8 @@ except Exception:            # Pillow missing: plain gradient banner, no mascot 
     ImageTk = theme_art = None
 
 
-class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMixin, FullscreenMixin, TrayMixin,
-          tk.Tk):
+class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMixin, SaveFindMixin, FullscreenMixin,
+          TrayMixin, tk.Tk):
     def __init__(self, start_minimized=False, start_fullscreen=False):
         super().__init__()
         self.title(APP_TITLE)
@@ -345,6 +346,8 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
                     self._on_game_detected(item[1], item[2])
                 elif kind == "game_end":
                     self._on_game_end(*item[1:])
+                elif kind == "folders_found":
+                    self._adopt_folders(item[1], item[2])
                 elif kind == "pad":
                     self._fs_input(item[1])
                     continue                    # fullscreen mode has redrawn already

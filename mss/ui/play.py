@@ -90,6 +90,11 @@ class PlayMixin:
                 self.tell(APP_TITLE, f"The executable for {g} wasn't found:\n{exe}", "warning")
             if not self.pick_exe(g):
                 return
+        if not gs.get("local_path") and gs.get("auto_sync", True) and self.backend is not None \
+                and not gs.get("find_declined"):
+            # no save folder here yet: find it first, so this PC starts from the saves in the cloud
+            self.find_saves(g, lambda found: self.play(g) if found else self._launch(g))
+            return
         if gs.get("local_path") and gs.get("auto_sync", True):
             if self.backend is None:
                 if not self.confirm(APP_TITLE, "Not connected to the cloud, so saves can't be synced.\n\n"
