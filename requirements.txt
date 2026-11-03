@@ -4,3 +4,4 @@ google-auth-oauthlib>=1.2
 pillow>=10
 psutil>=5.9
 pystray>=0.19
+pyyaml>=6

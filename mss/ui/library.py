@@ -185,15 +185,19 @@ class LibraryMixin:
             if not (art and info):
                 self.fetch_meta(name)            # whatever wasn't picked is looked up automatically
             self.show_details(name)
-            if messagebox.askyesno(
-                    "Save folder", f"Choose where {name} keeps its saves on this PC?\n\n"
-                    "• On the PC that has your saves: pick that folder.\n"
-                    "• On other PCs: pick where the saves should go.", parent=self):
-                self.choose_folder_menu()
+            # the .exe first: it shows where the game is installed, which some games keep their saves in
             if messagebox.askyesno("Game executable", f"Choose the .exe that starts {name}, so Play works?",
                                    parent=self):
                 self.pick_exe(name)
+            self.when_idle(lambda: self.find_saves(name, lambda found: found or self._choose_folder_yourself(name)))
         self.run_bg("Adding game", work, done)
+
+    def _choose_folder_yourself(self, name):
+        if self.game == name and messagebox.askyesno(
+                "Save folder", f"Choose where {name} keeps its saves on this PC?\n\n"
+                "• On the PC that has your saves: pick that folder.\n"
+                "• On other PCs: pick where the saves should go.", parent=self):
+            self.browse_folder()
 
     def remove_game(self, g):
         if not g or g in self.sessions:
