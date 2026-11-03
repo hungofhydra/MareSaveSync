@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import time
-from pathlib import Path
 
 from ..core import folders
 from ..core.diff import EXCLUDED, baseline
@@ -63,9 +62,9 @@ class SyncMixin:
         def after_scan(res):
             self._apply_scan(game, res)
             roots = self._roots(game, res[0])
-            missing = [p for p in roots.values() if p and not Path(p).is_dir()]
+            missing = [p for p in roots.values() if p and not folders.root_exists(p)]
             if direction == "up" and missing:
-                self.tell("Sync up", "The save folder does not exist:\n" + "\n".join(missing), "error")
+                self.tell("Sync up", "This save folder or file does not exist:\n" + "\n".join(missing), "error")
                 return
             plan = make_plan(self.diff, direction, self.mirror_var.get())
             if plan.empty:

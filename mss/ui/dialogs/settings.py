@@ -74,6 +74,14 @@ class SettingsDialog(tk.Toplevel):
         Btn(row, "Browse…", self._pick_root).pack(side="left", padx=(6, 0))
         Btn(row, "Use", self._use_folder).pack(side="left", padx=(6, 0))
 
+        em = group(left, "Emulators")
+        n = len(s.get("emulators", {}))
+        row = tk.Frame(em, bg=T["face"])
+        row.pack(fill="x")
+        label(row, f"{n} set up on this PC." if n else "Games can be started by an emulator with their ROM.").pack(
+            side="left")
+        Btn(row, "Emulators…", self._emulators).pack(side="right")
+
         st = group(left, "Startup")
         check(st, "Start Mare Save Sync with Windows (minimized)", self.startup, self._toggle_startup).pack(anchor="w")
 
@@ -121,6 +129,12 @@ class SettingsDialog(tk.Toplevel):
 
         Btn(right, "Close", self.destroy, padx=18).pack(anchor="e", side="bottom")
         self.grab_set()
+
+    def _emulators(self):
+        self.grab_release()
+        self.app.open_emulators()
+        if self.winfo_exists():
+            self.grab_set()
 
     def _toggle_startup(self):
         try:

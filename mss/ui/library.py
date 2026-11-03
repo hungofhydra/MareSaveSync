@@ -126,7 +126,7 @@ class LibraryMixin:
         elif state == "changes":
             self._chip(x + TILE_W - 4, y + 4, "▲ Not uploaded", "#8a5a00", anchor="ne", tags=tid)
         gs = self.settings.data["games"].get(g, {})
-        ready = gs.get("local_path") or gs.get("exe")
+        ready = gs.get("local_path") or gs.get("exe") or gs.get("rom")
         t = c.create_text(x + TILE_W / 2, y + TILE_H + 12, text=g, width=TILE_W + 14, justify="center",
                           fill="#ffffff" if ready else "#9d9dd0", font=UI, anchor="n", tags=tid)
         if g == self.selected:

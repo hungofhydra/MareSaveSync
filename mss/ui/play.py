@@ -8,6 +8,7 @@ from pathlib import Path
 from tkinter import filedialog
 
 from .. import APP_TITLE, launcher
+from ..core import emulators
 from ..core.diff import auto_direction
 from ..core.playtime import add_session, aggregate_stats, fmt_play_long
 from ..core.sync import make_plan
@@ -119,19 +120,53 @@ class PlayMixin:
         self._debounce("grid", 50, self._layout_grid)
         return p
 
+    def launch_command(self, g):
+        """(program, arguments) that start the game on this PC, or None if what's needed isn't set or found.
+        A game set to run with an emulator starts the emulator with its ROM (see core/emulators.py)."""
+        gs = self.settings.data["games"].get(g, {})
+        if gs.get("emulator"):
+            prof = self.settings.data.get("emulators", {}).get(gs["emulator"])
+            if not prof or not Path(prof.get("exe") or "").is_file() or not Path(gs.get("rom") or "").is_file():
+                return None
+            return prof["exe"], emulators.launch_args(prof, gs["rom"], gs.get("args", ""))
+        exe = gs.get("exe")
+        return (exe, gs.get("args", "")) if exe and Path(exe).exists() else None
+
+    def _emulator_problem(self, g):
+        """What's missing to start a game that runs with an emulator (None if it doesn't use one)."""
+        gs = self.settings.data["games"].get(g, {})
+        name = gs.get("emulator")
+        if not name:
+            return None
+        prof = self.settings.data.get("emulators", {}).get(name)
+        if not prof:
+            return f"{g} is set to run with the emulator “{name}”, which isn't set up on this PC."
+        if not Path(prof.get("exe") or "").is_file():
+            return f"The emulator “{name}” wasn't found:\n{prof.get('exe') or '(no program set)'}"
+        if not Path(gs.get("rom") or "").is_file():
+            return (f"{g}'s ROM wasn't found:\n{gs['rom']}" if gs.get("rom")
+                    else f"Choose {g}'s ROM first (its Game tab → ROM).")
+        return None
+
     def play(self, g):
         if not g or self.busy or g in self.sessions:
             return
         gs = self.settings.game(g)
+        problem = self._emulator_problem(g)
+        if problem:
+            self.tell(APP_TITLE, problem + "\n\nSet it on the game's Game tab (emulators: Settings → Emulators…).",
+                      "warning")
+            return
         exe = gs.get("exe")
-        if not exe or not Path(exe).exists():
+        if not gs.get("emulator") and (not exe or not Path(exe).exists()):
             if exe:
                 self.tell(APP_TITLE, f"The executable for {g} wasn't found:\n{exe}", "warning")
             if not self.pick_exe(g):
                 return
         if not gs.get("local_path") and gs.get("auto_sync", True) and self.backend is not None \
-                and not gs.get("find_declined"):
+                and not gs.get("find_declined") and not gs.get("emulator"):
             # no save folder here yet: find it first, so this PC starts from the saves in the cloud
+            # (not for emulated games: Ludusavi's list is of PC games, and a PC port's saves aren't these)
             self.find_saves(g, lambda found: self.play(g) if found else self._launch(g))
             return
         if gs.get("local_path") and gs.get("auto_sync", True):
@@ -151,8 +186,8 @@ class PlayMixin:
             self.after(400, self.minimize)
 
     def _start_session(self, g, attach_started=None):
-        gs = self.settings.game(g)
-        sess = launcher.GameSession(g, gs["exe"], gs.get("args", ""),
+        exe, args = self.launch_command(g)
+        sess = launcher.GameSession(g, exe, args,
                                     lambda game, secs, err: self.q.put(("game_end", game, secs, err)),
                                     attach_started=attach_started)
         self.sessions[g] = sess
@@ -176,9 +211,10 @@ class PlayMixin:
         while True:
             time.sleep(self.WATCH_EVERY)
             try:
+                # not games run by an emulator: its program running doesn't say which game it is
                 exes = {launcher.norm_exe(gs["exe"]): g
                         for g, gs in list(self.settings.data.get("games", {}).items())
-                        if g in self.all_games and g not in self.sessions
+                        if g in self.all_games and g not in self.sessions and not gs.get("emulator")
                         and str(gs.get("exe", "")).lower().endswith(".exe")}
                 for g, started in launcher.find_running(exes).items():
                     self.q.put(("game_detected", g, started))

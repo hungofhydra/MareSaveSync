@@ -316,7 +316,8 @@ class FullscreenMixin:
                 self.sessions[g].stop_tracking()
         elif self.busy:
             self._fs_toast("Please wait for the current task to finish.")
-        elif not Path(self.settings.data["games"].get(g, {}).get("exe") or "").is_file():
+        elif not self.settings.data["games"].get(g, {}).get("emulator") and \
+                not Path(self.settings.data["games"].get(g, {}).get("exe") or "").is_file():
             self.fs_set_exe(g, lambda ok: ok and self.when_idle(lambda: self.play(g)))   # no file browser here
         else:
             self.play(g)
@@ -567,7 +568,10 @@ class FullscreenMixin:
                 "changes": ("▲  Not uploaded", FS["amber"]), "conflict": ("⚠  Conflict", FS["red"])}.get(gs.get("state"))
         if chip:
             out.append(chip)
-        if not gs.get("exe"):
+        if gs.get("emulator"):
+            if self.launch_command(g) is None:
+                out.append(("Emulator or ROM not found on this PC", FS["button"]))
+        elif not gs.get("exe"):
             out.append(("No .exe set on this PC", FS["button"]))
         return out
 

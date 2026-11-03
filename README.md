@@ -33,6 +33,20 @@ A small game launcher that keeps your saves and playtime in sync across PCs thro
   game's page shows its hours on each PC. Weekly numbers start with the first session played on this version: older playtime only
   has totals, not dates.
 
+## Emulators
+
+- **Set up an emulator once per PC:** Settings → Emulators… → **Add emulator…** and pick its program. The arguments
+  that start a ROM are filled in for common emulators (RetroArch, Dolphin, PCSX2, DuckStation, PPSSPP, RPCS3, Cemu,
+  Ryujinx, xemu, mGBA, melonDS, Azahar, Flycast, Snes9x, Mesen); `{rom}` is replaced by the game's ROM. RetroArch
+  needs its core: change `CORE` in its arguments, or add one RetroArch profile per core.
+- **Each game:** its Game tab → **Run with:** the emulator, then choose its **ROM**. Play starts the emulator with
+  it. The emulator and ROM are set on each PC, like a game's .exe. Games run by an emulator aren't noticed when
+  the emulator is started outside the app (it can't tell which game is running): start them with Play.
+- **Saves in one file:** emulators often keep every game's saves in one folder (RetroArch's `saves\` has one
+  `.srm` per game). Saves tab → Choose… → **Choose a single file…** syncs just that game's file. It keeps the
+  name it had when first chosen in the cloud, so on another PC the file can be called something else (choose it
+  there the same way, or let Sync down create it). Extra save locations (Add folder…) can be single files too.
+
 ## Fullscreen mode (handheld PCs)
 
 A full-screen view made for an Xbox controller, like Steam Big Picture — for the ROG Ally, Legion Go and
@@ -129,7 +143,8 @@ mss/
   instance.py           one copy at a time: a second start hands over to the running one
   core/                 no GUI: scan.py, excludes.py, diff.py, sync.py, compare.py, playtime.py, settings.py,
                         folders.py, savepaths.py (paths that work on every PC), detect.py (finding save folders),
-                        installs.py (where Steam / Epic / GOG installed a game, and its .exe)
+                        installs.py (where Steam / Epic / GOG installed a game, and its .exe),
+                        emulators.py (emulator presets and launch arguments)
   storage/              cloud backends: folder.py, gdrive.py (+ oauth_client.py reading .env), common.py
   providers/            online services: sgdb.py (SteamGridDB API), steam.py (Steam store details),
                         wikipedia.py, ludusavi.py (Ludusavi's list of save locations)

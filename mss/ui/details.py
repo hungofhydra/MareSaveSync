@@ -123,6 +123,20 @@ class DetailsMixin:
         gt = tk.Frame(nb, bg=T["face"], padx=10, pady=8)
         nb.add(gt, text="Game")
         r = tk.Frame(gt, bg=T["face"])
+        r.pack(fill="x", pady=(0, 6))
+        label(r, "Run with:", width=24, anchor="w").pack(side="left")
+        self.runner_var = tk.StringVar()
+        self.runner_box = ttk.Combobox(r, textvariable=self.runner_var, state="readonly", width=34, font=UI)
+        self.runner_box.pack(side="left", padx=6)
+        self.runner_box.bind("<<ComboboxSelected>>", lambda e: self._pick_runner())
+        label(r, "an emulator starts the game's ROM", muted=True).pack(side="left", padx=4)
+        self.rom_row = r = tk.Frame(gt, bg=T["face"])
+        label(r, "ROM on this PC:", width=24, anchor="w").pack(side="left")
+        self.rom_lbl = tk.Label(r, text="—", bg=T["field"], fg=T["ink"], font=UI, relief="sunken", bd=2,
+                                anchor="w", padx=4)
+        self.rom_lbl.pack(side="left", fill="x", expand=True, padx=6, ipady=1)
+        Btn(r, "Browse…", lambda: self.pick_rom(self.game)).pack(side="left")
+        self.exe_row = r = tk.Frame(gt, bg=T["face"])
         r.pack(fill="x")
         label(r, "Game executable on this PC:", width=24, anchor="w").pack(side="left")
         self.exe_lbl = tk.Label(r, text="—", bg=T["field"], fg=T["ink"], font=UI, relief="sunken", bd=2,
@@ -256,6 +270,7 @@ class DetailsMixin:
         self._render_folders()
         exe = gs.get("exe")
         self.exe_lbl.configure(text=exe if exe else "Not set — choose the game's .exe to use Play")
+        self._render_runner(gs)
         self.args_var.set(gs.get("args", ""))
         self.auto_var.set(gs.get("auto_sync", True))
         allp = self.stats_all.get(g, {}).get("seconds", 0)
@@ -276,6 +291,63 @@ class DetailsMixin:
         self.play_btn.configure(text="■  Playing…" if g in self.sessions else "▶  Play")
         self._render_about()
 
+    # -------------------------------------------------------- run with an emulator
+    OWN_PROGRAM, SET_UP = "Its own program (.exe)", "Set up emulators…"
+
+    def _render_runner(self, gs):
+        names = sorted(self.settings.data.get("emulators", {}), key=str.lower)
+        emu = gs.get("emulator")
+        self.runner_box.configure(values=[self.OWN_PROGRAM] + names + [self.SET_UP])
+        self.runner_var.set(emu if emu else self.OWN_PROGRAM)
+        if emu:
+            rom = gs.get("rom")
+            self.rom_lbl.configure(text=rom if rom else "Not set — choose the game's ROM to use Play")
+            self.exe_row.pack_forget()
+            self.rom_row.pack(fill="x", after=self.runner_box.master)
+        else:
+            self.rom_row.pack_forget()
+            self.exe_row.pack(fill="x", after=self.runner_box.master)
+
+    def _pick_runner(self):
+        g, choice = self.game, self.runner_var.get()
+        if not g:
+            return
+        if choice == self.SET_UP:
+            self.open_emulators()
+            self._render_runner(self.settings.data["games"].get(g, {}))
+            return
+        gs = self.settings.game(g)
+        if choice == self.OWN_PROGRAM:
+            gs.pop("emulator", None)
+        else:
+            gs["emulator"] = choice
+        self.settings.save()
+        self.log(f"{g}: runs with " + (choice if gs.get("emulator") else "its own program"))
+        self._render_header()
+        if gs.get("emulator") and not gs.get("rom"):
+            self.pick_rom(g)
+
+    def pick_rom(self, g):
+        if not g:
+            return None
+        cur = self.settings.data["games"].get(g, {}).get("rom")
+        p = filedialog.askopenfilename(parent=self, title=f"ROM for {g}",
+                                       initialdir=str(Path(cur).parent) if cur else None)
+        if not p:
+            return None
+        self.settings.game(g)["rom"] = str(Path(p))
+        self.settings.save()
+        self.log(f"{g}: ROM set to {p}")
+        if self.game == g:
+            self._render_header()
+        self._debounce("grid", 50, self._layout_grid)
+        return p
+
+    def open_emulators(self):
+        from .dialogs.emulators import EmulatorsDialog
+        d = EmulatorsDialog(self, on_close=lambda: self.game and self._render_header())
+        self.wait_window(d)
+
     def last_note(self, text):
         self.backend_lbl.configure(text=text or self._backend_desc)
 
@@ -286,17 +358,21 @@ class DetailsMixin:
         for w in f.winfo_children():
             w.destroy()
         self.folder_btns = []
-        paths = self.settings.data["games"].get(self.game, {}).get("folders") or {}
-        rows = [(folders.MAIN, "Save folder on this PC:", self._local_path())]
-        rows += [(x["id"], f"{x.get('name') or x['id']}:", paths.get(x["id"]))
+        roots = self._roots(self.game, self.cfg)
+        main = "Save file on this PC:" if folders.file_name(self.cfg, folders.MAIN) else "Save folder on this PC:"
+        rows = [(folders.MAIN, main, roots.get(folders.MAIN))]
+        rows += [(x["id"], f"{x.get('name') or x['id']}:", roots.get(x["id"]))
                  for x in folders.extra_folders(self.cfg)]
         for fid, name, p in rows:
             r = tk.Frame(f, bg=T["face"])
             r.pack(fill="x", pady=(0, 4))
             label(r, name, width=22, anchor="w").pack(side="left")
-            text = (p if p and Path(p).is_dir() else f"{p}   (folder not found — Sync down will create it)" if p
+            kind = "file" if folders.is_file_root(p) else "folder"
+            text = (p if folders.root_exists(p) else f"{p}   ({kind} not found — Sync down will create it)" if p
                     else "Not set on this PC — Choose… → Find automatically, or pick the folder yourself" if not fid
                     else "Not set on this PC — its files aren't synced here")
+            if folders.is_file_root(p) and Path(p).name != p.cloud_name:
+                text += f"   (in the cloud as {p.cloud_name})"
             tk.Label(r, text=text, bg=T["field"], fg=T["ink"], font=UI, relief="sunken", bd=2, anchor="w",
                      padx=4).pack(side="left", fill="x", expand=True, padx=6, ipady=1)
             choose = Btn(r, "Choose…", None)
@@ -327,17 +403,22 @@ class DetailsMixin:
         m.add_command(label="Browse…", command=lambda: self.browse_folder(fid))
         m.add_command(label="Type or paste a path…  (supports %USERPROFILE% etc.)",
                       command=lambda: self.type_folder(fid))
+        m.add_separator()
+        m.add_command(label="Choose a single file…  (e.g. an emulator's .srm in a shared saves folder)",
+                      command=lambda: self.choose_file(fid))
         m.tk_popup(btn.winfo_rootx(), btn.winfo_rooty() + btn.winfo_height())
 
     def _ask_folder(self, fid, title):
         cur = self._roots(self.game, self.cfg).get(fid)
+        if folders.is_file_root(cur):
+            cur = str(Path(cur).parent)
         return filedialog.askdirectory(parent=self, title=title,
                                        initialdir=cur if cur and Path(cur).is_dir() else str(Path.home()))
 
     def browse_folder(self, fid=folders.MAIN):
         d = self._ask_folder(fid, f"Save folder for {self.game} on this PC")
         if d:
-            self._set_local_path(d, fid)
+            self._as_folder(fid, lambda: self._set_local_path(d, fid))
 
     def type_folder(self, fid=folders.MAIN):
         d = simpledialog.askstring(
@@ -345,7 +426,55 @@ class DetailsMixin:
             r"%USERPROFILE%\AppData\LocalLow\Studio\Game", parent=self,
             initialvalue=self._roots(self.game, self.cfg).get(fid) or "")
         if d and d.strip():
-            self._set_local_path(os.path.expanduser(os.path.expandvars(d.strip().strip('"'))), fid)
+            p = os.path.expanduser(os.path.expandvars(d.strip().strip('"')))
+            self._as_folder(fid, lambda: self._set_local_path(p, fid))
+
+    # ------------------------------------------------- a save location that's one file
+    def choose_file(self, fid=folders.MAIN):
+        game, cfg = self.game, self.cfg
+        cur = self._roots(game, cfg).get(fid)
+        p = filedialog.askopenfilename(parent=self, title=f"Save file for {game} on this PC",
+                                       initialdir=str(Path(cur).parent) if cur else str(Path.home()))
+        if not p:
+            return
+        name = folders.file_name(cfg, fid)
+        if name:                                   # already a single file: just where it is on this PC
+            self._set_local_path(p, fid)
+            return
+        name = Path(p).name
+        ids = {x["id"] for x in folders.extra_folders(cfg)}
+        others = [r for r in self.cloud_scan if folders.folder_of(r, ids) == fid
+                  and r != folders.cloud_prefix(fid) + name]
+        if others:
+            self.tell("Save file", f"The cloud already has {len(others)} file(s) saved from this folder, so it "
+                      "can't become a single file. Use Add folder… for the file instead, or delete the cloud "
+                      "saves first.", "warning")
+            return
+        self._set_kind(fid, name, lambda: self._set_local_path(p, fid))
+
+    def _as_folder(self, fid, then):
+        """Choosing a folder for a save location that was a single file makes it a folder again."""
+        if folders.file_name(self.cfg, fid):
+            self._set_kind(fid, None, then)
+        else:
+            then()
+
+    def _set_kind(self, fid, name, then):
+        """Make a save location a single file (its cloud name) or a folder (None), for every PC."""
+        game = self.game
+
+        def work():
+            cfg = self.backend.get_game_config(game)
+            folders.set_file_name(cfg, fid, name)
+            self.backend.set_game_config(game, cfg)
+            return cfg
+
+        def done(cfg):
+            self.log(f"{game}: save location is now " + (f"a single file ({name})" if name else "a folder"))
+            if game == self.game:
+                self.cfg = cfg
+                then()
+        self.run_bg("Saving the save location", work, done)
 
     def _overlapping(self, d, fid):
         """Another save folder of this game that is, contains or is inside `d` (they'd sync the same files)."""
