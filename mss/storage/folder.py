@@ -164,6 +164,23 @@ class FolderBackend:
                 pass
         return _group_playtime(entries, legacy)
 
+    def read_play_history(self, since=0.0, skip_device=None):
+        """[{"game", "device_id", "device", "days"}] of every PC's per-day playtime (of games played since
+        `since`; skip_device: this PC, whose history is already here)."""
+        out = []
+        for game, d in self._dirs.items():
+            if game in self._removed:
+                continue
+            for p in (d / PLAYTIME_SUB).glob("*.json"):
+                try:
+                    e = json.loads(p.read_text("utf-8"))
+                except (OSError, ValueError):
+                    continue
+                if e.get("days") and e.get("device_id") != skip_device and e.get("last_played", 0) >= since:
+                    out.append({"game": game, "device_id": e.get("device_id"), "device": e.get("device", ""),
+                                "days": e["days"]})
+        return out
+
     def write_stats(self, device_id, doc):
         """Writes this PC's playtime into each game's playtime/ folder (only games that changed)."""
         for game, st in (doc.get("games") or {}).items():

@@ -1,18 +1,53 @@
 """Playing games: launching, tracking playtime, syncing before and after."""
 from __future__ import annotations
 
+import datetime as dt
+import threading
 import time
 from pathlib import Path
 from tkinter import filedialog
 
 from .. import APP_TITLE, launcher
 from ..core.diff import auto_direction
-from ..core.playtime import aggregate_stats, fmt_play_long
+from ..core.playtime import add_session, aggregate_stats, fmt_play_long
 from ..core.sync import make_plan
 
 
 class PlayMixin:
     """Part of App (see ui/app.py)."""
+
+    other_pcs: list = []                        # the other PCs' playtime docs ({"device_id", "device", "games"})
+
+    def pc_stats(self) -> list[dict]:
+        """Every PC's playtime, this one last: [{"device_id", "device", "games": {game: {seconds, last_played,
+        days?}}, "me": bool}]."""
+        d = self.settings.data
+        mine = {"device_id": d["device_id"], "device": d.get("device_name") or "This PC",
+                "games": d.get("my_stats", {}), "me": True}
+        return [dict(f, me=False) for f in self.other_pcs] + [mine]
+
+    def load_play_history(self, weeks, done):
+        """Every PC's per-day playtime for the last `weeks` weeks, loaded in the background (the other PCs' is in
+        their playtime files). done([(game, {date: seconds}), …], error or None) is called on the Tk thread."""
+        first = dt.datetime.combine(dt.date.today() - dt.timedelta(weeks=weeks), dt.time()).timestamp()
+        mine = [(g, st.get("days")) for g, st in self.settings.data.get("my_stats", {}).items() if st.get("days")]
+        b, dev, result = self.backend, self.settings.data["device_id"], {}
+
+        def work():
+            try:
+                others = b.read_play_history(first, dev) if b is not None else []
+                result["h"] = mine + [(e["game"], e["days"]) for e in others]
+            except Exception as ex:
+                result.update(h=mine, error=ex)
+                self.log_ts(f"Couldn't load the other PCs' playtime history: {ex}")
+        threading.Thread(target=work, daemon=True).start()
+
+        def check():
+            if "h" in result:
+                done(result["h"], result.get("error"))
+            else:
+                self.after(150, check)
+        check()
 
     def _merge_stats(self, files):
         dev = self.settings.data["device_id"]
@@ -27,6 +62,7 @@ class PlayMixin:
         if mine != cloud_mine:
             changed = True
         others = [f for f in files if f.get("device_id") != dev]
+        self.other_pcs = others                 # each PC's totals, for the stats window
         self.stats_all = aggregate_stats(others + [{"games": mine}])
         self.settings.save()
         self.resort()
@@ -51,6 +87,7 @@ class PlayMixin:
         m = self.settings.data.setdefault("my_stats", {}).setdefault(g, {"seconds": 0, "last_played": 0})
         m["seconds"] = m.get("seconds", 0) + seconds
         m["last_played"] = now
+        add_session(m.setdefault("days", {}), now, seconds)
         a = self.stats_all.setdefault(g, {"seconds": 0, "last_played": 0})
         a["seconds"] += seconds
         a["last_played"] = now

@@ -6,7 +6,7 @@ Both expose the same methods:
     list_files(name) -> {rel: FileInfo}
     upload(name, rel, src_path, mtime) download(name, rel, dest_path)
     delete(name, rel) read_bytes(name, rel)
-    read_all_stats() write_stats(device_id, doc)
+    read_all_stats() write_stats(device_id, doc) read_play_history(since, skip_device)
     read_art(name) write_art(name, art)
     art_files(name) upload_art_file(name, fname, src) download_art_file(name, fname, dest)
     delete_art_file(name, fname)

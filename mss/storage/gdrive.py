@@ -353,6 +353,22 @@ class DriveBackend:
                 pass
         return _group_playtime(entries, legacy)
 
+    def read_play_history(self, since=0.0, skip_device=None):
+        """[{"game", "device_id", "device", "days"}] of every PC's per-day playtime. The totals come from the files'
+        properties (read_all_stats); the days are in the files themselves, so only the files of games played
+        since `since` are downloaded. skip_device: this PC, whose history is already here."""
+        out = []
+        for (game, dev), fid in list(self._pt_ids.items()):
+            if dev == skip_device or self._pt_seen.get((game, dev), (0, 0))[1] < since:
+                continue
+            try:
+                e = json.loads(self._get_bytes(fid).decode("utf-8"))
+            except ValueError:
+                continue
+            if e.get("days"):
+                out.append({"game": game, "device_id": dev, "device": e.get("device", ""), "days": e["days"]})
+        return out
+
     def write_stats(self, device_id, doc):
         """Writes this PC's playtime into each game's playtime/ folder (only games that changed)."""
         for game, st in (doc.get("games") or {}).items():

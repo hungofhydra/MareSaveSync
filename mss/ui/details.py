@@ -258,10 +258,11 @@ class DetailsMixin:
         self.exe_lbl.configure(text=exe if exe else "Not set — choose the game's .exe to use Play")
         self.args_var.set(gs.get("args", ""))
         self.auto_var.set(gs.get("auto_sync", True))
-        mine = self.settings.data.get("my_stats", {}).get(g, {}).get("seconds", 0)
         allp = self.stats_all.get(g, {}).get("seconds", 0)
-        self.play_info.configure(text=f"Playtime on all PCs: {fmt_play_long(allp)}     "
-                                      f"on this PC: {fmt_play_long(mine)}\n"
+        per_pc = [(pc.get("device") or "PC") + (" (this PC)" if pc["me"] else "") + f": {fmt_play_long(s)}"
+                  for pc in self.pc_stats() if (s := pc["games"].get(g, {}).get("seconds", 0))]
+        self.play_info.configure(text=f"Playtime on all PCs: {fmt_play_long(allp)}"
+                                      + (f"     ({',   '.join(per_pc)})" if len(per_pc) > 1 else "") + "\n"
                                       "Playtime is kept separately from saves: deleting saves or removing the "
                                       "game doesn't erase it (only “Purge all data” does).")
         art = self.art_info(g)
