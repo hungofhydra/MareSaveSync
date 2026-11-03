@@ -186,8 +186,8 @@ class DetailsMixin:
         for b in (self.opt_btn, self.up_btn, self.down_btn, self.play_btn):
             c.create_window(x, y, window=b, anchor="e")
             x -= b.winfo_reqwidth() + (14 if b is self.down_btn else 6)
-        chip = {"synced": ("☁  Synchronized", "#1d7a2e"), "changes": ("●  Not synced", "#8a5a00"),
-                "conflict": ("⚠  Conflict", "#b3261e")}.get(self.settings.data["games"].get(g, {}).get("state"))
+        chip = {"synced": ("✓  Synchronized", "#1d7a2e"), "cloud_newer": ("☁  Cloud is newer", "#1f4fbf"),
+                "changes": ("▲  Not uploaded", "#8a5a00"), "conflict": ("⚠  Conflict", "#b3261e")}.get(self.settings.data["games"].get(g, {}).get("state"))
         if g in self.sessions:
             chip = ("▶  Playing now", "#1d7a2e")
         if chip:

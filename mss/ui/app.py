@@ -12,7 +12,7 @@ from tkinter import messagebox, ttk
 
 from .. import APP_TITLE, instance, storage, updater
 from ..core import folders
-from ..core.diff import EXCLUDED, SAME, auto_direction, compute_diff
+from ..core.diff import auto_direction, compute_diff
 from ..core.playtime import aggregate_stats
 from ..core.settings import Settings
 from .. import launcher
@@ -25,7 +25,7 @@ from .info import InfoMixin
 from .library import LibraryMixin
 from .play import PlayMixin
 from .savefind import SaveFindMixin
-from .sync import SyncMixin
+from .sync import CHECK_EVERY_MS, SyncMixin
 from .theme import SMALL, UI, UIB, WIN, T
 from .tray import TrayMixin
 from .update import UpdateMixin
@@ -71,7 +71,9 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
         self.q: queue.Queue = queue.Queue()
         self.art_q: queue.Queue = queue.Queue()
         self.info_q: queue.Queue = queue.Queue()
+        self.state_q: queue.Queue = queue.Queue()
         self._info_pending: set = set()         # games whose info is being reloaded
+        self._state_times: dict = {}            # game -> when its sync state was last set
         self.photos: dict = {}
         self._tile_games: dict = {}
         self._jobs: dict = {}
@@ -86,6 +88,8 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
         threading.Thread(target=self._art_worker, daemon=True).start()
         threading.Thread(target=self._info_worker, daemon=True).start()
         threading.Thread(target=self._watch_games, daemon=True).start()
+        threading.Thread(target=self._state_worker, daemon=True).start()
+        self.after(CHECK_EVERY_MS, self._periodic_state_check)
         self.after(100, self._poll)
         self.after(300, self.connect)
         self.after(5000, self._auto_check_updates)
@@ -356,6 +360,10 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
                     self._adopt_folders(item[1], item[2])
                 elif kind == "update":
                     self._on_update_info(item[1])
+                elif kind == "state":
+                    self._set_state(item[1], item[2], since=item[3])
+                elif kind == "cloud_newer":
+                    self._announce_cloud_newer(item[1])
                 elif kind == "status":
                     if self.busy:
                         self.status.configure(text=item[1])
@@ -451,7 +459,12 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
             self.settings.game(self.game)["auto_sync"] = self.auto_var.get()
             self.settings.save()
 
-    def _set_state(self, g, state):
+    def _set_state(self, g, state, since=None):
+        """since: when a background check of the game started; its result is dropped if the state was set
+        after that (e.g. by a sync that finished meanwhile)."""
+        if since is not None and (self._state_times.get(g, 0) > since or g not in self.all_games):
+            return
+        self._state_times[g] = time.time()
         gs = self.settings.game(g)
         if gs.get("state") != state:
             gs["state"] = state
@@ -461,11 +474,11 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
         elif self.lib_view.winfo_ismapped():
             self._debounce("grid", 100, self._layout_grid)
 
-    def _state_from(self, diff):
-        pending = [e for e in diff if e.status not in (SAME, EXCLUDED)]
-        if not pending:
-            return "synced"
-        return "conflict" if auto_direction(diff) == "ask" else "changes"
+    @staticmethod
+    def _state_from(diff):
+        """"synced", "cloud_newer" (only the cloud changed: Sync down / Play gets it), "changes" (only this PC
+        changed: not uploaded yet) or "conflict" (both, or unknown)."""
+        return {None: "synced", "down": "cloud_newer", "up": "changes"}.get(auto_direction(diff), "conflict")
 
     def _set_backend_desc(self, text):
         self._backend_desc = text
@@ -496,6 +509,7 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
             self._set_games(games)
             for g in games:
                 self.fetch_meta(g)
+            self.check_states()
 
         if s["backend"] == "gdrive" and not interactive and not (app_dir() / "token.json").is_file():
             self._show_signed_out()
