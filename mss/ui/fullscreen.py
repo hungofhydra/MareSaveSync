@@ -24,6 +24,7 @@ from ..core.playtime import fmt_ago, fmt_play_long
 from ..info import format as info_format
 from . import gamepad
 from .dialogs.conflict import ConflictDialog
+from .library import SORTS
 from .theme import WIN
 
 try:
@@ -245,9 +246,15 @@ class FullscreenMixin:
         self._fs_render()
 
     def _fs_games(self):
-        """The library, most recently played first."""
-        return sorted(self.all_games, key=lambda g: (-(self.stats_all.get(g, {}).get("last_played") or 0),
-                                                     g.lower()))
+        """The library, most recently played first unless another order was chosen in the ☰ menu."""
+        return sorted(self.all_games, key=self.sort_key(self.settings.data.get("fs_sort", "last_played")))
+
+    def _fs_next_sort(self):
+        keys = list(SORTS)
+        cur = self.settings.data.get("fs_sort", "last_played")
+        self.settings.data["fs_sort"] = keys[(keys.index(cur) + 1) % len(keys) if cur in keys else 0]
+        self.settings.save()
+        self._fs_toast(f"Sorted by {SORTS[self.settings.data['fs_sort']].lower()}")    # focus stays on the game
 
     def _fs_open(self, g):
         self._fs_view, self._fs_btn, self._fs_focus = "game", 0, g
@@ -296,6 +303,8 @@ class FullscreenMixin:
             items.append(("Sign in with Google", lambda: self.connect(interactive=True)))
         else:
             items.append(("Connect", self.connect))
+        items.append((f"Sort: {SORTS.get(self.settings.data.get('fs_sort', 'last_played'), 'Last played')}",
+                      self._fs_next_sort))
         if self.update_info:
             items.append((f"Update to {self.update_info['tag']}", self.install_update))
         return items + [("Desktop mode", self.leave_fullscreen), (f"Exit {APP_TITLE}", self._fs_exit)]

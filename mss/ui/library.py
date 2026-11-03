@@ -11,9 +11,42 @@ from .dialogs.remove import RemoveDialog
 from .theme import GRID_BG, TILE_H, TILE_W, UI, UIB, T
 from .widgets import Btn, label, menu
 
+# How the library can be sorted: {setting value: shown name}. Played and added games come newest/most first;
+# games never played (or added before that was recorded) go last, by name.
+SORTS = {"name": "Name", "last_played": "Last played", "playtime": "Most played", "added": "Recently added"}
+
 
 class LibraryMixin:
     """Part of App (see ui/app.py)."""
+
+    added: dict = {}                    # game -> when it was added to the library (from the backend)
+
+    def _list_games(self, b):
+        """Background part of loading the library: the game names, and when each was added."""
+        games = b.list_games()
+        self.added = b.added_times()
+        return games
+
+    def sort_key(self, how):
+        """A key that sorts game names the way `how` (a SORTS key) says."""
+        st = self.stats_all
+        if how == "last_played":
+            return lambda g: (-(st.get(g, {}).get("last_played") or 0), g.lower())
+        if how == "playtime":
+            return lambda g: (-(st.get(g, {}).get("seconds") or 0), g.lower())
+        if how == "added":
+            return lambda g: (-(self.added.get(g) or 0), g.lower())
+        return str.lower
+
+    def _set_sort(self, how):
+        self.settings.data["library_sort"] = how
+        self.settings.save()
+        self._apply_filter()
+
+    def resort(self):
+        """Put the library back in order after playtime changed (a game closed, other PCs' playtime arrived)."""
+        if self.settings.data.get("library_sort", "name") in ("last_played", "playtime"):
+            self._debounce("resort", 150, lambda: self._apply_filter(keep_open=True))
 
     def _build_library(self, parent):
         f = tk.Frame(parent, bg=T["face"])
@@ -23,6 +56,14 @@ class LibraryMixin:
         self.new_btn.pack(side="left")
         self.reload_btn = Btn(tb, "Refresh", self.reload_games)
         self.reload_btn.pack(side="left", padx=6)
+        label(tb, "Sort:").pack(side="left", padx=(12, 4))
+        how = self.settings.data.get("library_sort", "name")
+        self.sort_var = tk.StringVar(value=SORTS.get(how, SORTS["name"]))
+        sort = ttk.Combobox(tb, textvariable=self.sort_var, values=list(SORTS.values()), state="readonly", width=14,
+                            font=UI)
+        sort.pack(side="left")
+        sort.bind("<<ComboboxSelected>>", lambda e: (
+            self._set_sort(next(k for k, v in SORTS.items() if v == self.sort_var.get())), sort.selection_clear()))
         label(tb, "Double-click a cover to open it  ·  right-click for Play and more", muted=True).pack(side="right")
         gf = tk.Frame(f, relief="sunken", bd=2, bg=GRID_BG)
         gf.pack(fill="both", expand=True)
@@ -131,12 +172,14 @@ class LibraryMixin:
             self.show_library()
         self._update_controls()
 
-    def _apply_filter(self, open_first=False):
+    def _apply_filter(self, open_first=False, keep_open=False):
+        """Filter the library by the search box and sort it. keep_open: only re-sort; the open game stays open."""
         q = self.search_var.get().strip().lower()
-        self.games = [g for g in self.all_games if q in g.lower()] if q else list(self.all_games)
+        games = [g for g in self.all_games if q in g.lower()] if q else list(self.all_games)
+        self.games = sorted(games, key=self.sort_key(self.settings.data.get("library_sort", "name")))
         n, t = len(self.games), len(self.all_games)
         self.count_lbl.configure(text=f"{t} game{'s' if t != 1 else ''}" if n == t else f"{n} of {t} games")
-        if self.game is not None and q:
+        if self.game is not None and q and not keep_open:
             self.show_library()
         self._layout_grid()
         if open_first and self.games:
@@ -144,7 +187,7 @@ class LibraryMixin:
 
     def reload_games(self):
         def work():
-            return self.backend.list_games(), self.backend.read_all_stats()
+            return self._list_games(self.backend), self.backend.read_all_stats()
 
         def done(r):
             games, stats = r
@@ -179,7 +222,7 @@ class LibraryMixin:
         def work():
             self.backend.create_game(name)
             self._store_meta(name, art, info)
-            return self.backend.list_games()
+            return self._list_games(self.backend)
 
         def done(games):
             self.log(f"Added {name!r}")
@@ -211,7 +254,7 @@ class LibraryMixin:
 
         def work():
             self.backend.delete_game(g, purge=purge)
-            return self.backend.list_games()
+            return self._list_games(self.backend)
 
         def done(games):
             d = self.settings.data

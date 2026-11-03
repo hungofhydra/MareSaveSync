@@ -1,7 +1,7 @@
 """Storage backends for Mare Save Sync (top folder MareSaveSync/ in My Drive or the synced folder).
 
 Both expose the same methods:
-    describe() list_games() create_game(name) delete_game(name, purge=False)
+    describe() list_games() added_times() create_game(name) delete_game(name, purge=False)
     get_game_config(name) set_game_config(name, cfg)
     list_files(name) -> {rel: FileInfo}
     upload(name, rel, src_path, mtime) download(name, rel, dest_path)

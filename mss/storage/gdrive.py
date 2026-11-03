@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -87,6 +88,7 @@ class DriveBackend:
         self.root_id = self._find_root()
         self._games: dict[str, str] = {}          # every game folder, removed ones included
         self._removed: set[str] = set()
+        self._added: dict[str, float] = {}         # game -> when it was added to the library
         self._files: dict[str, dict[str, str]] = {}
         self._config_ids: dict[str, str | None] = {}
         self._info_ids: dict[str, str | None] = {}
@@ -191,23 +193,39 @@ class DriveBackend:
     # --------------------------------------------------------------- games
     def list_games(self):
         items = self._list(f"'{self.root_id}' in parents and mimeType = '{FOLDER_MIME}' "
-                           "and trashed = false", "id,name,appProperties")
+                           "and trashed = false", "id,name,appProperties,createdTime")
         items = [it for it in items if not it["name"].startswith(".")]
         self._games = {it["name"]: it["id"] for it in items}
         self._removed = {it["name"] for it in items if (it.get("appProperties") or {}).get("ssRemoved") == "1"}
+        self._added = {}
+        for it in items:                # ssAdded: added again after being removed; else when its folder was made
+            try:
+                added = (it.get("appProperties") or {}).get("ssAdded")
+                self._added[it["name"]] = float(added) if added else datetime.fromisoformat(
+                    it["createdTime"].replace("Z", "+00:00")).timestamp()
+            except (KeyError, ValueError):
+                pass
         return sorted((g for g in self._games if g not in self._removed), key=str.lower)
+
+    def added_times(self) -> dict[str, float]:
+        """{game: when it was added to the library} as of the last list_games()."""
+        return dict(self._added)
 
     def create_game(self, name):
         if name in self.list_games():
             raise ValueError(f"A game called {name!r} already exists.")
         if name in self._removed:                 # added again: bring back its playtime, art and exclusions
-            self.svc.files().update(fileId=self._games[name], body={"appProperties": {"ssRemoved": None}}).execute()
+            now = time.time()
+            self.svc.files().update(fileId=self._games[name], body={"appProperties": {
+                "ssRemoved": None, "ssAdded": str(now)}}).execute()
             self._removed.discard(name)
+            self._added[name] = now
             return
         fid = self.svc.files().create(
             body={"name": name, "mimeType": FOLDER_MIME, "parents": [self.root_id]},
             fields="id").execute()["id"]
         self._games[name] = fid
+        self._added[name] = time.time()
         self._files[name] = {}
         self._config_ids[name] = None
         self.set_game_config(name, {"excludes": []})

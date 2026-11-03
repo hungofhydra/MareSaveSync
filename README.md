@@ -35,7 +35,7 @@ other Windows handhelds (their built-in controls count as an Xbox controller).
 - Open it with **View → Fullscreen mode**, **F11**, or Settings → Fullscreen mode → **Open Fullscreen mode**.
   Tick **Start in Fullscreen mode** (off by default) to always start in it, or start the app with `--fullscreen`.
 - The selected game's art fills the screen and the library is a row of covers below it, most recently played
-  first. **A** opens a game (Play, Sync up, Sync down, Check saves), **X** plays it, **LB / RB** page through the
+  first (☰ → **Sort** changes the order). **A** opens a game (Play, Sync up, Sync down, Check saves), **X** plays it, **LB / RB** page through the
   covers, **☰** opens the menu (Desktop mode, Exit, …), **B** goes back. The keyboard works too (arrows,
   Enter, Esc, Tab for the menu), and so do touch and the mouse.
 - Save conflicts and sync questions appear inside fullscreen mode, so you answer them with the controller.
@@ -138,6 +138,9 @@ mss/
 
 ## Using it
 
+- **Sort** the library by name, last played, most played or recently added (the box next to Refresh). The order
+  is remembered, and updates when a game closes. Games you've never played go last when sorting by playtime.
+  For games added by older versions, "added" is when their cloud folder was created.
 - **Add game** → name it → choose the .exe on this PC. The save folder is then found automatically and you're asked
   whether to use it. If it isn't found, choose it yourself: _Choose… → Type or paste a path_ accepts things like
   `%USERPROFILE%\AppData\LocalLow\AcrobaticChirimenjako\SchrodingersCallAdv` (AppData is hidden in the normal

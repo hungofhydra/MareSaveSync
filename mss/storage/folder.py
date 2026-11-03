@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import time
 from pathlib import Path
 
 from .. import CLOUD_ROOT, LEGACY_CLOUD_ROOT
@@ -34,13 +35,14 @@ class FolderBackend:
         self.root.mkdir(exist_ok=True)
         self._dirs: dict[str, Path] = {}          # every game folder, removed ones included
         self._removed: set[str] = set()
+        self._added: dict[str, float] = {}         # game -> when it was added to the library
         self._pt_seen: dict[tuple, tuple] = {}    # (game, device) -> (seconds, last_played) in the cloud
 
     def describe(self) -> str:
         return f"Folder: {self.root}"
 
     def list_games(self):
-        self._dirs, self._removed = {}, set()
+        self._dirs, self._removed, self._added = {}, set(), {}
         for d in self.root.iterdir():
             if d.name.startswith("."):
                 continue
@@ -54,7 +56,15 @@ class FolderBackend:
                 self._dirs[name] = d
                 if data.get("removed"):
                     self._removed.add(name)
+                try:                                # games added by older versions: when their folder was made
+                    self._added[name] = float(data.get("added") or d.stat().st_ctime)
+                except (OSError, ValueError, TypeError):
+                    pass
         return sorted((g for g in self._dirs if g not in self._removed), key=str.lower)
+
+    def added_times(self) -> dict[str, float]:
+        """{game: when it was added to the library} as of the last list_games()."""
+        return dict(self._added)
 
     def _dir(self, game) -> Path:
         if game not in self._dirs:
@@ -69,6 +79,7 @@ class FolderBackend:
         if name in self._removed:                 # added again: bring back its playtime, art and exclusions
             cfg = self.get_game_config(name)
             cfg.pop("removed", None)
+            cfg["added"] = self._added[name] = time.time()
             self.set_game_config(name, cfg)
             self._removed.discard(name)
             (self._dir(name) / "files").mkdir(exist_ok=True)
@@ -78,7 +89,8 @@ class FolderBackend:
             d, n = self.root / f"{safe_name(name)} ({n})", n + 1
         (d / "files").mkdir(parents=True)
         self._dirs[name] = d
-        self.set_game_config(name, {"excludes": []})
+        self._added[name] = time.time()
+        self.set_game_config(name, {"excludes": [], "added": self._added[name]})
 
     def delete_game(self, name, purge=False):
         """Hides the game from the library, keeping everything. purge: delete its whole folder instead
