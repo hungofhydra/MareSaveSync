@@ -26,6 +26,11 @@ A small game launcher that keeps your saves and playtime in sync across PCs thro
   “Playing” after you quit, press **Playing…** (or Options → Game has closed) to stop tracking.
 - Turn off “Sync automatically” in the Game tab for games you want to sync by hand.
 - Achievements are not synced
+- **View → Playtime stats…** shows your playtime on all PCs together: this week, the last 30 days and all
+  time, hours per week for the last 12 weeks (a chart, or the same as a table; hover a week to see its games),
+  and every game's hours on each PC with where and when it was last played. A game's Game tab also shows its
+  hours on each PC. Weekly numbers start with the first session played on this version: older playtime only
+  has totals, not dates.
 
 ## Fullscreen mode (handheld PCs)
 
@@ -210,7 +215,7 @@ source — that folder keeps the original “SaveSync” name so existing settin
   updated when you start the moved app; turn it off before deleting the folder.
 - In the cloud, everything about a game is in its own folder `My Drive/MareSaveSync/<game>/`:
   the save files, `savesync.json` (exclusions, extra save folders, where the save folders are), `info.json` (name, description, …), `art/` (artwork choice +
-  images) and `playtime/` (one file per PC).
+  images) and `playtime/` (one file per PC, with its total and its seconds per day for the last 400 days).
   **Remove from library** only hides the folder; add the game again with the same name and its saves,
   playtime, artwork and exclusions come back. Tick **Purge all data** in that dialog to delete the whole
   folder instead (on Google Drive it goes to the trash, so it can still be restored from there).

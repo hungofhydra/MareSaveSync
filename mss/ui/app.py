@@ -169,6 +169,7 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
         for name, items in (("File", [("Add game…", self.new_game), ("Settings…", self.open_settings),
                                       None, ("Exit", self.destroy)]),
                             ("View", [("Library", self.show_library), ("Refresh library", self.reload_games),
+                                      ("Playtime stats…", self.open_stats),
                                       ("Fullscreen mode   F11", self.enter_fullscreen),
                                       None, ("Open backups folder", self.open_backups)]),
                             ("Help", [("Log…", self.open_log), ("Check for updates…", self.check_updates_now),
@@ -247,6 +248,7 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
             for g in recent:
                 m.add_command(label=f"▶  {g}", command=lambda g=g: self.play(g))
         m.add_separator()
+        m.add_command(label="Playtime stats…", command=self.open_stats)
         m.add_command(label="Fullscreen mode", command=self.enter_fullscreen)
         m.add_command(label="Settings…", command=self.open_settings)
         m.add_command(label="Open backups folder", command=self.open_backups)
@@ -297,6 +299,12 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
         d = app_dir() / "backups"
         d.mkdir(exist_ok=True)
         open_in_explorer(d)
+
+    def open_stats(self):
+        from .dialogs.stats_window import StatsWindow
+        if getattr(self, "_stats_win", None) is not None and self._stats_win.winfo_exists():
+            self._stats_win.destroy()               # open afresh: the numbers may have changed
+        self._stats_win = StatsWindow(self)
 
     def open_log(self):
         from .dialogs.log_window import LogWindow

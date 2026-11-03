@@ -7,12 +7,22 @@ from tkinter import filedialog
 
 from .. import APP_TITLE, launcher
 from ..core.diff import auto_direction
-from ..core.playtime import aggregate_stats, fmt_play_long
+from ..core.playtime import add_session, aggregate_stats, fmt_play_long
 from ..core.sync import make_plan
 
 
 class PlayMixin:
     """Part of App (see ui/app.py)."""
+
+    other_pcs: list = []                        # the other PCs' playtime docs ({"device_id", "device", "games"})
+
+    def pc_stats(self) -> list[dict]:
+        """Every PC's playtime, this one last: [{"device_id", "device", "games": {game: {seconds, last_played,
+        days?}}, "me": bool}]."""
+        d = self.settings.data
+        mine = {"device_id": d["device_id"], "device": d.get("device_name") or "This PC",
+                "games": d.get("my_stats", {}), "me": True}
+        return [dict(f, me=False) for f in self.other_pcs] + [mine]
 
     def _merge_stats(self, files):
         dev = self.settings.data["device_id"]
@@ -27,6 +37,7 @@ class PlayMixin:
         if mine != cloud_mine:
             changed = True
         others = [f for f in files if f.get("device_id") != dev]
+        self.other_pcs = others                 # each PC's totals, for the stats window
         self.stats_all = aggregate_stats(others + [{"games": mine}])
         self.settings.save()
         self.resort()
@@ -51,6 +62,7 @@ class PlayMixin:
         m = self.settings.data.setdefault("my_stats", {}).setdefault(g, {"seconds": 0, "last_played": 0})
         m["seconds"] = m.get("seconds", 0) + seconds
         m["last_played"] = now
+        add_session(m.setdefault("days", {}), now, seconds)
         a = self.stats_all.setdefault(g, {"seconds": 0, "last_played": 0})
         a["seconds"] += seconds
         a["last_played"] = now

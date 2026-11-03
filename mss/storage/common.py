@@ -46,9 +46,12 @@ def _replace(tmp: Path, dest: Path) -> None:
 
 
 def _playtime_entry(game, device_id, doc, st) -> dict:
-    return {"game": game, "device_id": device_id, "device": doc.get("device", ""),
-            "updated": doc.get("updated", time.time()),
-            "seconds": st.get("seconds", 0), "last_played": st.get("last_played", 0)}
+    e = {"game": game, "device_id": device_id, "device": doc.get("device", ""),
+         "updated": doc.get("updated", time.time()),
+         "seconds": st.get("seconds", 0), "last_played": st.get("last_played", 0)}
+    if st.get("days"):
+        e["days"] = st["days"]           # seconds per date, for the weekly chart (see core/playtime.py)
+    return e
 
 
 def _group_playtime(entries, legacy) -> list[dict]:
