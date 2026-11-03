@@ -1,6 +1,8 @@
 """Playing games: launching, tracking playtime, syncing before and after."""
 from __future__ import annotations
 
+import datetime as dt
+import threading
 import time
 from pathlib import Path
 from tkinter import filedialog
@@ -23,6 +25,29 @@ class PlayMixin:
         mine = {"device_id": d["device_id"], "device": d.get("device_name") or "This PC",
                 "games": d.get("my_stats", {}), "me": True}
         return [dict(f, me=False) for f in self.other_pcs] + [mine]
+
+    def load_play_history(self, weeks, done):
+        """Every PC's per-day playtime for the last `weeks` weeks, loaded in the background (the other PCs' is in
+        their playtime files). done([(game, {date: seconds}), …], error or None) is called on the Tk thread."""
+        first = dt.datetime.combine(dt.date.today() - dt.timedelta(weeks=weeks), dt.time()).timestamp()
+        mine = [(g, st.get("days")) for g, st in self.settings.data.get("my_stats", {}).items() if st.get("days")]
+        b, dev, result = self.backend, self.settings.data["device_id"], {}
+
+        def work():
+            try:
+                others = b.read_play_history(first, dev) if b is not None else []
+                result["h"] = mine + [(e["game"], e["days"]) for e in others]
+            except Exception as ex:
+                result.update(h=mine, error=ex)
+                self.log_ts(f"Couldn't load the other PCs' playtime history: {ex}")
+        threading.Thread(target=work, daemon=True).start()
+
+        def check():
+            if "h" in result:
+                done(result["h"], result.get("error"))
+            else:
+                self.after(150, check)
+        check()
 
     def _merge_stats(self, files):
         dev = self.settings.data["device_id"]

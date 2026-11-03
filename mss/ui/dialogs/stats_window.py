@@ -6,7 +6,6 @@ files, so it's loaded (in the background) when this window opens.
 from __future__ import annotations
 
 import datetime as dt
-import threading
 import tkinter as tk
 from tkinter import ttk
 from typing import TYPE_CHECKING
@@ -27,6 +26,31 @@ GRID, AXIS, SURFACE = "#e6e6e6", "#a0a0a0", "#ffffff"
 def hours(sec) -> str:
     h = (sec or 0) / 3600
     return "0 h" if h == 0 else f"{h:.1f} h".replace(".0 h", " h") if h < 10 else f"{h:.0f} h"
+
+
+def last_days(histories, n) -> float:
+    today = dt.date.today()
+    return sum(s for _g, days in histories for k, s in (days or {}).items()
+               if (today - dt.date.fromisoformat(k)).days < n)
+
+
+def history_caption(since) -> str:
+    if since:
+        return (f"Weekly numbers start on {since.strftime('%d %b %Y')}: playtime from before then has no dates, "
+                "so it's only in the totals.")
+    return "Weekly numbers start from your next game session: playtime from before has no dates."
+
+
+def game_rows(app, pcs):
+    """[(game, total seconds, [seconds on each PC], last played, on which PC)], most played first."""
+    rows = []
+    for g in app.all_games:
+        per = [pc["games"].get(g, {}) for pc in pcs]
+        last_i = max(range(len(per)), key=lambda i: per[i].get("last_played", 0), default=None)
+        last = per[last_i].get("last_played", 0) if last_i is not None else 0
+        rows.append((g, sum(p.get("seconds", 0) for p in per), [p.get("seconds", 0) for p in per], last,
+                     pcs[last_i].get("device") if last else ""))
+    return sorted(rows, key=lambda r: (-r[1], r[0].lower()))
 
 
 class StatsWindow(tk.Toplevel):
@@ -89,43 +113,14 @@ class StatsWindow(tk.Toplevel):
 
     # ------------------------------------------------------------ data
     def _load(self):
-        app = self.app
-        first = dt.datetime.combine(dt.date.today() - dt.timedelta(weeks=WEEKS), dt.time()).timestamp()
-        mine = [(g, st.get("days")) for g, st in app.settings.data.get("my_stats", {}).items() if st.get("days")]
-        result: dict = {}
-
-        def work():
-            try:
-                b = app.backend
-                others = b.read_play_history(first, app.settings.data["device_id"]) if b is not None else []
-                result["h"] = mine + [(e["game"], e["days"]) for e in others]
-            except Exception as ex:
-                result["error"] = ex
-                result["h"] = mine
-        threading.Thread(target=work, daemon=True).start()
-
-        def check():
-            if not self.winfo_exists():
-                return
-            if "h" not in result:
-                self.after(150, check)
-                return
-            if "error" in result:
-                app.log(f"Couldn't load the other PCs' playtime history: {result['error']}")
-            self._loaded(result["h"], result.get("error"))
-        check()
+        self.app.load_play_history(WEEKS, lambda h, err: self.winfo_exists() and self._loaded(h, err))
 
     def _loaded(self, histories, error=None):
         self.weeks = weekly(histories, WEEKS)
         self.since = history_start(histories)
-        today = dt.date.today()
-        month = sum(s for _g, days in histories for k, s in (days or {}).items()
-                    if (today - dt.date.fromisoformat(k)).days < 30)
         self.tile_vals["week"].configure(text=hours(self.weeks[-1]["seconds"]))
-        self.tile_vals["month"].configure(text=hours(month))
-        cap = ("Weekly numbers start on " + self.since.strftime("%d %b %Y") +
-               ": playtime from before then has no dates, so it's only in the totals.") if self.since else \
-            "Weekly numbers start from your next game session: playtime from before has no dates."
+        self.tile_vals["month"].configure(text=hours(last_days(histories, 30)))
+        cap = history_caption(self.since)
         if error:
             cap += "  (Only this PC's: the other PCs' history couldn't be loaded.)"
         self.caption.configure(text=cap)
@@ -138,15 +133,8 @@ class StatsWindow(tk.Toplevel):
                                         ",  ".join(f"{g} {hours(s)}" for g, s in top)))
 
     def _fill_games(self):
-        app, t = self.app, self.games
-        rows = []
-        for g in app.all_games:
-            per = [pc["games"].get(g, {}) for pc in self.pcs]
-            last_i = max(range(len(per)), key=lambda i: per[i].get("last_played", 0), default=None)
-            last = per[last_i].get("last_played", 0) if last_i is not None else 0
-            rows.append((g, sum(p.get("seconds", 0) for p in per), [p.get("seconds", 0) for p in per], last,
-                         self.pcs[last_i].get("device") if last else ""))
-        for g, total, per, last, where in sorted(rows, key=lambda r: (-r[1], r[0].lower())):
+        t = self.games
+        for g, total, per, last, where in game_rows(self.app, self.pcs):
             t.insert("", "end", values=(g, hours(total), *[hours(s) if s else "—" for s in per],
                                         fmt_ago(last) if last else "never", where))
 

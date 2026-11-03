@@ -22,7 +22,7 @@ from tkinter import messagebox
 
 from .. import APP_TITLE
 from ..core.diff import EXCLUDED, SAME
-from ..core.playtime import fmt_ago, fmt_play_long
+from ..core.playtime import fmt_ago, fmt_play_long, fmt_play_short
 from ..info import format as info_format
 from . import gamepad
 from .dialogs.conflict import ConflictDialog
@@ -221,6 +221,9 @@ class FullscreenMixin:
             self._fs_menu = 0
             self._fs_render()
             return
+        if self._fs_view == "stats":
+            self._fs_stats_input(b)
+            return
         if self._fs_view != "game":
             if b == "y" and self.all_games:
                 self.after_idle(self._fs_search)
@@ -332,7 +335,7 @@ class FullscreenMixin:
         if self.backend is not None:
             items += [("Add game", self.fs_add_game), ("Refresh library", self.reload_games)]
         if self.all_games:
-            items.append(("Search", self._fs_search))
+            items += [("Search", self._fs_search), ("Playtime stats", self.fs_open_stats)]
         elif self.settings.data.get("backend") == "gdrive":
             items.append(("Sign in with Google", lambda: self.connect(interactive=True)))
         else:
@@ -458,13 +461,15 @@ class FullscreenMixin:
         if self._fs_focus not in games:
             self._fs_focus = games[0] if games else None
         g = self._fs_focus
-        if g is None:
+        if g is None and self._fs_view != "stats":
             self._fs_view = "home"
         bg = self._fs_bg(g, W, H)
         if bg is not None:
             c.create_image(0, 0, image=bg, anchor="nw")
         self._fs_topbar(W)
-        if g is None:
+        if self._fs_view == "stats":
+            self._fs_stats_page(W, H)
+        elif g is None:
             self._fs_empty(W, H)
         elif self._fs_view == "game":
             self._fs_game_page(g, W, H)
@@ -504,7 +509,8 @@ class FullscreenMixin:
             left = right - 2 * r
             c.create_oval(left, y - r, right, y + r, fill=PAD_COLORS.get(b, FS["button"]),
                           outline=FS["dim"] if b == "start" else "")
-        c.create_text((left + right) // 2, y, text={"start": "☰"}.get(b, b.upper()), fill=FS["ink"],
+        c.create_text((left + right) // 2, y, text={"start": "☰", "left": "◀", "right": "▶"}.get(b, b.upper()),
+                      fill=FS["ink"],
                       font=self._fs_font(14, bold=True))
         return left
 
@@ -586,6 +592,10 @@ class FullscreenMixin:
         st = self.stats_all.get(g, {})
         meta = (f"Played for {fmt_play_long(st['seconds'])}   ·   Last played {fmt_ago(st.get('last_played'))}"
                 if st.get("seconds") else "Not played yet")
+        per_pc = [f"{pc.get('device') or 'PC'} {fmt_play_short(s)}"
+                  for pc in self.pc_stats() if (s := pc["games"].get(g, {}).get("seconds", 0))]
+        if len(per_pc) > 1:                             # played on more than one PC: how much on each
+            meta += "   ·   " + ",  ".join(per_pc)
         t = c.create_text(x, y, text=meta, anchor="nw", fill=FS["sub"], font=self._fs_font(20, semi=True))
         y = c.bbox(t)[3] + p(30)
         chips = self._fs_chips(g)
@@ -736,6 +746,8 @@ class FullscreenMixin:
             hints = [("a", "Select"), ("b", "Cancel")]
         elif self._fs_menu is not None:
             hints = [("a", "Select"), ("b", "Close")]
+        elif self._fs_view == "stats":
+            hints = [("left right", "Week"), ("b", "Back"), ("start", "Menu")]
         elif self._fs_focus is None:
             hints = ([("y", "Search"), ("b", "Clear search")] if self._fs_query else []) + [("start", "Menu")]
         elif self._fs_view == "game":

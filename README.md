@@ -29,7 +29,8 @@ A small game launcher that keeps your saves and playtime in sync across PCs thro
 - **View → Playtime stats…** shows your playtime on all PCs together: this week, the last 30 days and all
   time, hours per week for the last 12 weeks (a chart, or the same as a table; hover a week to see its games),
   and every game's hours on each PC with where and when it was last played. A game's Game tab also shows its
-  hours on each PC. Weekly numbers start with the first session played on this version: older playtime only
+  hours on each PC. In fullscreen mode it's ☰ → **Playtime stats** (◀ ▶ pick a week to see its games), and a
+  game's page shows its hours on each PC. Weekly numbers start with the first session played on this version: older playtime only
   has totals, not dates.
 
 ## Fullscreen mode (handheld PCs)
