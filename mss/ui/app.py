@@ -30,6 +30,7 @@ from .theme import SMALL, UI, UIB, WIN, T
 from .tray import TrayMixin
 from .fs_add import FsAddMixin
 from .fs_keyboard import FsKeyboardMixin
+from .fs_settings import FsSettingsMixin
 from .fs_stats import FsStatsMixin
 from .update import UpdateMixin
 from .widgets import Btn, _mix, label, load_photo, menu, open_in_explorer, sunken_label, window
@@ -42,7 +43,7 @@ except Exception:            # Pillow missing: plain gradient banner, no mascot 
 
 
 class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMixin, SaveFindMixin, FullscreenMixin,
-          FsKeyboardMixin, FsAddMixin, FsStatsMixin, TrayMixin, UpdateMixin, tk.Tk):
+          FsKeyboardMixin, FsAddMixin, FsStatsMixin, FsSettingsMixin, TrayMixin, UpdateMixin, tk.Tk):
     def __init__(self, start_minimized=False, start_fullscreen=False):
         super().__init__()
         self.title(APP_TITLE)

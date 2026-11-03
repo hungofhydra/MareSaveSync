@@ -66,8 +66,13 @@ other Windows handhelds (their built-in controls count as an Xbox controller).
   programs when you press Play, and one with no save folder has **Find save folder** on its page.
 - Save conflicts and sync questions appear inside fullscreen mode, so you answer them with the controller.
 - Fullscreen mode stays open behind the game while you play and comes back to the front when it closes.
-- Extra save folders, exclusions and settings are done in desktop mode (☰ → Desktop mode), as is choosing a
-  game's .exe or save folder by hand.
+- **☰ → Settings:** start in fullscreen mode, start with Windows, mirror deletions, update checks, the SteamGridDB
+  key and this PC's name (typed on the on-screen keyboard). **A** changes the selected one.
+- A game's page → **⋯ More:** **Show save files** lists the comparison with the cloud (differences first; **A** on a
+  file shows both sides and can exclude it or its folder, **X** compares again), plus Sync automatically, Launch
+  options and Look for the save folder again.
+- Extra save folders, writing exclusion patterns, emulators, storage and appearance are set up in desktop mode
+  (☰ → Desktop mode), as is choosing a game's .exe or save folder by hand.
 
 **AnyFSE** (use it as the home app of the Xbox full screen experience): in AnyFSE's settings choose a
 **Custom** launcher, pick `MareSaveSync.exe`, and give it the argument `--fullscreen`. Settings →
@@ -156,6 +161,7 @@ mss/
     update.py           the Update button, Help → Check for updates…
     fullscreen.py       fullscreen mode (controller UI); gamepad.py reads the Xbox controller (XInput)
     fs_keyboard.py      the on-screen keyboard;  fs_add.py  Add game in fullscreen mode
+    fs_settings.py      settings, a game's options and its save files in fullscreen mode;  fs_stats.py  playtime
     theme.py  widgets.py  theme_art.py (banner/icon drawing)
     dialogs/            settings, metadata (game info & artwork picker), conflict, remove, diff_window
 ```

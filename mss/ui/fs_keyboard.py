@@ -62,6 +62,8 @@ class FsKeyboardMixin:
             kb["shift"] = not kb["shift"]
         elif act == "back":
             kb["text"] = kb["text"][:-1]
+            if not kb["text"]:
+                kb["shift"] = True              # empty again: the next letter starts it, capitalised
         elif len(kb["text"]) < MAX_LEN:
             kb["text"] += act
             kb["shift"] = False
