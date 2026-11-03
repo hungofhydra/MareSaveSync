@@ -6,6 +6,9 @@ An existing dist/MareSaveSync/data folder (settings of a copy you ran from there
 
     python build.py            build
     python build.py --version  print the app version (used to name releases)
+
+The release workflow sets MSS_BUILD to its run number: the exe knows which release it is (v<version>.<build>)
+and can update itself (mss/updater.py). Without it the build number is 0 and the exe doesn't update.
 """
 import os
 import shutil
@@ -40,9 +43,12 @@ def build() -> int:
         return 1
     if (DIST / "data").is_dir():                 # a rebuild replaces dist/MareSaveSync
         shutil.move(str(DIST / "data"), str(KEEP))
+    build_file = ROOT / "mss" / "_build.py"
+    build_file.write_text(f"BUILD = {int(os.environ.get('MSS_BUILD') or 0)}\n", "utf-8")
     try:
         return subprocess.call(args + ["app.py"], cwd=ROOT)
     finally:
+        build_file.unlink(missing_ok=True)       # running from source has no build number
         if KEEP.exists():
             DIST.mkdir(parents=True, exist_ok=True)
             shutil.move(str(KEEP), str(DIST / "data"))

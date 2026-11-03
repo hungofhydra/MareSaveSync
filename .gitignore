@@ -9,6 +9,8 @@ dist/
 *.spec
 *.exe
 
+mss/_build.py
+
 __pycache__/
 *.pyc
 .venv/

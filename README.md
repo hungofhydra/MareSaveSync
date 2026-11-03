@@ -72,6 +72,15 @@ says so and closes rather than keeping settings somewhere else. If you used an o
 outside the folder is the optional **Start with Windows** entry; it follows the folder if you move it (it's
 updated the next time you start the app). Running from source uses `%APPDATA%\SaveSync` instead.
 
+**Updates:** the app checks GitHub for a newer release when it starts and every 12 hours, and shows an
+**Update to v…** button in the status bar (also in the Start menu and fullscreen mode's ☰ menu, plus a Windows
+notification once per version). Nothing is installed until you click it and say yes. The update is downloaded
+into `data\update\`, checked against the checksum GitHub publishes, and then the app closes, swaps in the new
+`MareSaveSync.exe` and `_internal`, and starts again. The `data` folder is left alone, and if the swap fails the
+old version is put back. Help → **Check for updates…** checks right away; Settings → Updates turns the
+automatic check off. Close any game you're playing first. Only release builds update themselves: a copy run
+from source or built on your own PC doesn't know which release it is.
+
 **From source:**
 
 1. Install Python 3.10+ from python.org (on Windows, tick “Add python.exe to PATH”; tkinter is included).
@@ -89,7 +98,9 @@ release workflow run `build.py`.
 
 Every push to `main`/`master` builds the app on GitHub Actions (`.github/workflows/release.yml`) and publishes a
 release `v<version>.<run number>` with `MareSaveSync-…-windows.zip` — unzip it anywhere and run
-`MareSaveSync\MareSaveSync.exe`. The version comes from `VERSION` in `mss/__init__.py`. Google sign-in is built
+`MareSaveSync\MareSaveSync.exe`. The version comes from `VERSION` in `mss/__init__.py`; the workflow passes its run
+number to `build.py` (`MSS_BUILD`), which builds it into the exe so the app knows which release it is and can
+update itself (`mss/updater.py`). Google sign-in is built
 in from the repository secrets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (Settings → Secrets and variables →
 Actions); without them the release still builds, just without built-in sign-in.
 
@@ -100,6 +111,7 @@ app.py                  entry point (python app.py)
 mss/
   paths.py              assets, exe/source folder, local data folder
   launcher.py           start a game and wait for it to close; start with Windows
+  updater.py            check GitHub releases, download an update and swap it in (--finish-update)
   instance.py           one copy at a time: a second start hands over to the running one
   core/                 no GUI: scan.py, excludes.py, diff.py, sync.py, compare.py, playtime.py, settings.py,
                         folders.py, savepaths.py (paths that work on every PC), detect.py (finding save folders)
@@ -111,6 +123,7 @@ mss/
   ui/
     app.py              main window, built from mixins:
     library.py  details.py  play.py  sync.py  artwork.py  info.py (About tab)  savefind.py (finding save folders)
+    update.py           the Update button, Help → Check for updates…
     fullscreen.py       fullscreen mode (controller UI); gamepad.py reads the Xbox controller (XInput)
     theme.py  widgets.py  theme_art.py (banner/icon drawing)
     dialogs/            settings, metadata (game info & artwork picker), conflict, remove, diff_window
