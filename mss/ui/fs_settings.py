@@ -7,6 +7,8 @@ list (differences first); A on a file shows both sides and can exclude it. Up / 
 from __future__ import annotations
 
 from .. import launcher, updater
+from ..art import sources as art_sources
+from ..info import sources as info_sources
 from ..core.diff import CHANGED, CLOUD_ONLY, EXCLUDED, LOCAL_ONLY, SAME
 from ..core.util import escape_pattern, fmt_time, human_size
 from .fullscreen import FS
@@ -40,6 +42,9 @@ class FsSettingsMixin:
                 ("Check for updates now", updater.current_text(), self.check_updates_now),
                 ("SteamGridDB API key", "Set" if d.get("sgdb_key") else "Not set — covers and game info need it",
                  self._fs_edit_key),
+                ("IGDB key (client_id:client_secret)", "Set" if d.get("igdb_key") else "Not set — optional",
+                 self._fs_edit_igdb_key),
+                ("Covers and game info from", self.art_source().name, self._fs_toggle_art_source),
                 ("This PC's name", d.get("device_name") or "—", self._fs_edit_name)]
         n = len(d.get("emulators", {}))
         rows.append(("Emulators", f"{n} set up" if n else "None", None))
@@ -73,6 +78,30 @@ class FsSettingsMixin:
             for g in self.all_games:
                 self.fetch_meta(g)
             self.note("SteamGridDB key saved — fetching artwork and game info" if key else "SteamGridDB key removed")
+
+    def _fs_edit_igdb_key(self):
+        key = self.fs_type("IGDB key", self.settings.data.get("igdb_key", ""),
+                           "client_id:client_secret from dev.twitch.tv/console → Register Your Application.")
+        if key is not None:
+            key = key.strip()
+            if key and ":" not in key:
+                self.tell("IGDB", "Enter it as  client_id:client_secret", "error")
+                return
+            self.settings.data["igdb_key"] = key
+            self.settings.save()
+            if self.art_source().name == "IGDB":
+                for g in self.all_games:
+                    self.fetch_meta(g)
+            self.note("IGDB key saved" if key else "IGDB key removed")
+
+    def _fs_toggle_art_source(self):
+        """Switch between the sources (new games and reloads use it; existing covers stay)."""
+        names = list(art_sources.SOURCES)
+        nxt = names[(names.index(self.art_source().name) + 1) % len(names)]
+        self.settings.data["art_source"] = nxt
+        if nxt in info_sources.SOURCES:
+            self.settings.data["info_source"] = nxt
+        self.settings.save()
 
     def _fs_edit_name(self):
         name = self.fs_type("This PC's name", self.settings.data.get("device_name", ""),

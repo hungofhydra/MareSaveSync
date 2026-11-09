@@ -29,6 +29,7 @@ class SettingsDialog(tk.Toplevel):
         self.mascot = tk.StringVar(value=s.get("mascot_path", ""))
         self.mascot_icon = tk.BooleanVar(value=s.get("mascot_icon", False))
         self.key = tk.StringVar(value=s.get("sgdb_key", ""))
+        self.igdb_key = tk.StringVar(value=s.get("igdb_key", ""))
         self.startup = tk.BooleanVar(value=launcher.get_startup())
         self.start_fs = tk.BooleanVar(value=s.get("start_fullscreen", False))
         self.check_updates = tk.BooleanVar(value=s.get("check_updates", True))
@@ -98,6 +99,14 @@ class SettingsDialog(tk.Toplevel):
         row.pack(fill="x")
         tk.Entry(row, textvariable=self.key, width=36, show="•", **app._field(row)).pack(side="left", fill="x", expand=True)
         Btn(row, "Save key", self._save_key).pack(side="left", padx=(6, 0))
+        label(a, "IGDB (optional, pick it under Game info & artwork). Needs a Twitch app, entered as\n"
+                 "client_id:client_secret — dev.twitch.tv/console → Register Your Application.",
+              justify="left").pack(anchor="w", pady=(10, 6))
+        row = tk.Frame(a, bg=T["face"])
+        row.pack(fill="x")
+        tk.Entry(row, textvariable=self.igdb_key, width=36, show="•", **app._field(row)).pack(
+            side="left", fill="x", expand=True)
+        Btn(row, "Save key", self._save_igdb_key).pack(side="left", padx=(6, 0))
 
         ap = group(right, "Appearance")
         label(ap, "Mascot image for the corner of the desktop\n(PNG with transparency looks best).",
@@ -165,6 +174,19 @@ class SettingsDialog(tk.Toplevel):
         for g in self.app.all_games:
             self.app.fetch_meta(g)
         self.app.note("SteamGridDB key saved — fetching artwork and game info")
+
+    def _save_igdb_key(self):
+        key = self.igdb_key.get().strip()
+        if key and ":" not in key:
+            messagebox.showerror("IGDB", "Enter the Twitch client id and secret as  client_id:client_secret",
+                                 parent=self)
+            return
+        self.app.settings.data["igdb_key"] = key
+        self.app.settings.save()
+        if self.app.art_source().name == "IGDB":
+            for g in self.app.all_games:
+                self.app.fetch_meta(g)
+        self.app.note("IGDB key saved" if key else "IGDB key removed")
 
     def _pick_root(self):
         p = filedialog.askdirectory(parent=self, title="Storage folder")

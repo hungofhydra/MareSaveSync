@@ -145,6 +145,8 @@ class MetadataDialog(tk.Toplevel):
         src = art_sources.SOURCES[name]
         if self.app.settings.data.get("art_source") != name:
             self.app.settings.data["art_source"] = name
+            if name in info_sources.SOURCES:        # game info comes from the same service as the artwork
+                self.app.settings.data["info_source"] = name
             self.app.settings.save()
         self.gen += 1
         self.results, self.infos, self.page = [], {}, 0

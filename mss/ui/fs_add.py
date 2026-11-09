@@ -1,4 +1,4 @@
-"""Adding a game in fullscreen mode, with a controller: type its name, pick which game it is (SteamGridDB), pick
+"""Adding a game in fullscreen mode, with a controller: type its name, pick which game it is (SteamGridDB or IGDB), pick
 the .exe from where Steam, Epic or GOG installed it (core/installs.py), then the save folder is looked for
 (savefind.py). Each step's question appears inside fullscreen mode; anything skipped can be done later.
 """
@@ -9,9 +9,9 @@ from pathlib import Path
 
 from ..core import installs
 from ..info import sources
-from ..providers import ludusavi, sgdb
+from ..providers import ludusavi
 
-MATCHES = 5                 # SteamGridDB results offered
+MATCHES = 5                 # search results offered
 
 
 class FsAddMixin:
@@ -28,11 +28,12 @@ class FsAddMixin:
                                              "program and save folder.")
         if not name:
             return
-        key = self.settings.data.get("sgdb_key")
+        asrc = self.art_source()
+        key = self.settings.data.get(asrc.key_setting)
         if not key:
             self._fs_add_create(name, None)
             return
-        self.run_bg("Looking up the game", lambda: sgdb.SGDB(key).search(name)[:MATCHES],
+        self.run_bg("Looking up the game", lambda: asrc.make(key).search(name)[:MATCHES],
                     lambda res: self._fs_add_pick(name, res),
                     failed=lambda ex: self._fs_add_pick(name, [], ex))
 
@@ -42,10 +43,10 @@ class FsAddMixin:
             return f"{r.get('name')} ({year})" if year else r.get("name")
         choices = [(label(r), r) for r in results]
         if results:
-            text = "Which game is it? Its cover and info come from SteamGridDB."
+            text = f"Which game is it? Its cover and info come from {self.art_source().name}."
             choices.append((f"None of these: add it as “{name}”", "typed"))
         else:
-            text = (f"SteamGridDB found nothing for “{name}”" + (f" ({error})" if error else "")
+            text = (f"{self.art_source().name} found nothing for “{name}”" + (f" ({error})" if error else "")
                     + ". Add it anyway? Its cover can be chosen later in desktop mode.")
             choices.append((f"Add “{name}”", "typed"))
         choices.append(("Cancel", "cancel"))
@@ -59,9 +60,9 @@ class FsAddMixin:
             self.tell("Add game", f"“{g}” is already in the library.")
             self._fs_focus, self._fs_query = g, ""
             return
-        key = self.settings.data.get("sgdb_key")
-        src = sources.SOURCES.get(self.settings.data.get("info_source", sources.DEFAULT),
-                                  sources.SOURCES[sources.DEFAULT])
+        asrc = self.art_source()
+        key = self.settings.data.get(asrc.key_setting)
+        src = sources.SOURCES.get(asrc.name) or sources.SOURCES[sources.DEFAULT]       # info from the same service
         info_key = self.settings.data.get(src.key_setting)
 
         def work():
@@ -69,8 +70,8 @@ class FsAddMixin:
             art = info = None
             if pick and key:
                 try:
-                    art = sgdb.SGDB(key).art_for(pick["id"], pick.get("name", ""))
-                except sgdb.SGDBError as ex:
+                    art = asrc.make(key).art_for(pick["id"], pick.get("name", ""))
+                except asrc.error as ex:
                     self.log_ts(f"Artwork for {g}: {ex}")
             if pick and info_key:
                 try:

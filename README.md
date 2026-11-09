@@ -17,6 +17,18 @@ A small game launcher that keeps your saves and playtime in sync across PCs thro
    same art (other PCs don't even need a SteamGridDB key). Like playtime, it's kept apart from the saves:
    deleting cloud saves or removing the game doesn't erase it (only _Purge all data_ does).
 
+### IGDB (optional)
+
+IGDB can be used instead of SteamGridDB for covers, banners and game info (description, developers, genres).
+
+1. Register an application at dev.twitch.tv/console (any name, redirect `http://localhost`, category
+   _Application Integration_), then copy its **Client ID** and generate a **Client Secret**.
+2. Settings → Artwork → IGDB → paste them as `client_id:client_secret` → Save key.
+3. In **Game info & artwork…** (or **Add game**) pick **IGDB** as the Source. The choice is remembered and used
+   for automatic lookups; fullscreen mode switches it under ☰ → Settings → Covers and game info from.
+
+IGDB has covers and artwork/screenshots but no logos. Games already showing art keep it until you reload them.
+
 ## Playing
 
 - Set the game's .exe once per PC (you're asked on first Play, or Game tab → Browse).
@@ -151,10 +163,10 @@ mss/
                         installs.py (where Steam / Epic / GOG installed a game, and its .exe),
                         emulators.py (emulator presets and launch arguments)
   storage/              cloud backends: folder.py, gdrive.py (+ oauth_client.py reading .env), common.py
-  providers/            online services: sgdb.py (SteamGridDB API), steam.py (Steam store details),
+  providers/            online services: sgdb.py (SteamGridDB API), igdb.py (IGDB API), steam.py (Steam store details),
                         wikipedia.py, ludusavi.py (Ludusavi's list of save locations)
   art/                  cover art: sources.py (registry), images.py (local cache)
-  info/                 game info: sources.py (registry; SteamGridDB + Steam store)
+  info/                 game info: sources.py (registry; SteamGridDB + Steam store, or IGDB)
   ui/
     app.py              main window, built from mixins:
     library.py  details.py  play.py  sync.py  artwork.py  info.py (About tab)  savefind.py (finding save folders)

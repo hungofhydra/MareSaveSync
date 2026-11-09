@@ -283,7 +283,8 @@ class DetailsMixin:
         art = self.art_info(g)
         self.art_lbl.configure(text="Custom cover" if images.is_custom(art.get("grid", ""))
                                else f"SteamGridDB: {art['sgdb_name']}" if art.get("sgdb_name")
-                               else "No artwork yet" if not self.settings.data.get("sgdb_key")
+                               else f"IGDB: {art['igdb_name']}" if art.get("igdb_name")
+                               else "No artwork yet" if not self.settings.data.get(self.art_source().key_setting)
                                else "Artwork: searching…" if not art else "No artwork found")
         ls = gs.get("last_sync")
         self.last_note(f"Last sync from this PC: {'▲ up' if ls['direction'] == 'up' else '▼ down'}, "

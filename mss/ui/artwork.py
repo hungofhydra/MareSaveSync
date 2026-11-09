@@ -4,7 +4,7 @@ from __future__ import annotations
 import tkinter as tk
 
 from ..art import images
-from ..providers import sgdb
+from ..art import sources as art_sources
 from .theme import TILE_H, TILE_W
 
 try:
@@ -19,6 +19,10 @@ class ArtworkMixin:
 
     def art_info(self, g) -> dict:
         return self.settings.data["art_cache"].get(g) or {}
+
+    def art_source(self):
+        """The cover-art source chosen in the Game info & artwork dialog (SteamGridDB until then)."""
+        return art_sources.SOURCES.get(self.settings.data.get("art_source"), art_sources.SOURCES[art_sources.DEFAULT])
 
     @staticmethod
     def _art_file(url):
@@ -40,7 +44,7 @@ class ArtworkMixin:
         return self.photos[key]
 
     def _art_worker(self):
-        """Background: read each game's artwork from the cloud (.mss-art), auto-pick from SteamGridDB if there's
+        """Background: read each game's artwork from the cloud (.mss-art), auto-pick from the chosen art source if there's
         none yet, and make sure the images are both cached here and stored in the cloud."""
         while True:
             g, force = self.art_q.get()
@@ -56,12 +60,13 @@ class ArtworkMixin:
                         art = None
                     if art:
                         b.write_art(g, art)
-                key = self.settings.data.get("sgdb_key")
+                src = self.art_source()
+                key = self.settings.data.get(src.key_setting)
                 if key and (force or not art):
                     try:
-                        art = sgdb.SGDB(key).auto_art(g) or {"none": True}
+                        art = src.make(key).auto_art(g) or {"none": True}
                         b.write_art(g, art)
-                    except sgdb.SGDBError as ex:
+                    except src.error as ex:
                         self.log_ts(f"Artwork for {g}: {ex}")
                 if art:
                     self._sync_art_files(b, g, art)

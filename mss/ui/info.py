@@ -5,7 +5,7 @@ import tkinter as tk
 
 from ..info import format as info_format
 from ..info import sources
-from ..providers import sgdb
+from ..providers import igdb, sgdb
 from .theme import UI, T
 from .widgets import Btn, label
 
@@ -44,12 +44,12 @@ class InfoMixin:
                 outdated = info is not None and not info.get("description") \
                     and info.get("v", 1) < sources.INFO_VERSION
                 if key and (force or info is None or outdated):
-                    sgdb_id = ((outdated and info.get("sgdb_id"))           # the game picked for its info,
-                               or (self.art_info(g) or {}).get("sgdb_id"))  # else the one the artwork came from
+                    game_id = ((outdated and info.get(src.id_key))              # the game picked for its info,
+                               or (self.art_info(g) or {}).get(src.id_key))     # else the one the artwork came from
                     try:
-                        info = src.make(key).fetch(g, sgdb_id) or {"none": True, "v": sources.INFO_VERSION}
+                        info = src.make(key).fetch(g, game_id) or {"none": True, "v": sources.INFO_VERSION}
                         b.write_info(g, info)
-                    except sgdb.SGDBError as ex:
+                    except (sgdb.SGDBError, igdb.IGDBError) as ex:
                         self.log_ts(f"Game info for {g}: {ex}")
                 self.q.put(("info", g, info or {}))
             except Exception as ex:
