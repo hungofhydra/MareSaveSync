@@ -139,8 +139,22 @@ class GameSession(threading.Thread):
                     else:
                         os.startfile(str(exe))  # type: ignore[attr-defined]
             except OSError as ex:
-                self.on_end(self.game, 0, ex)
-                return
+                if getattr(ex, "winerror", None) == 740 and sys.platform == "win32":
+                    # The game needs administrator rights: ask Windows for the UAC prompt.
+                    # Playtime is then tracked by watching the game folder (no process handle).
+                    try:
+                        import ctypes
+                        with _no_bundle_dll_dir():
+                            rc = ctypes.windll.shell32.ShellExecuteW(
+                                None, "runas", str(exe), self.args or None, str(folder), 1)
+                        if rc <= 32:
+                            raise OSError("Administrator permission was declined or the game couldn't start.")
+                    except OSError as ex2:
+                        self.on_end(self.game, 0, ex2)
+                        return
+                else:
+                    self.on_end(self.game, 0, ex)
+                    return
             time.sleep(3)
         idle_since = None
         while not self.stop_event.is_set():
