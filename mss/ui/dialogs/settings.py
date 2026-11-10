@@ -123,6 +123,12 @@ class SettingsDialog(tk.Toplevel):
         label(fs, "A full-screen view for handheld PCs, made for an Xbox controller\n"
                   "(like Steam Big Picture). F11 switches it on and off.", justify="left").pack(anchor="w", pady=(0, 6))
         check(fs, "Start in Fullscreen mode", self.start_fs, self._save_start_fs).pack(anchor="w")
+        self.fs_sounds = tk.BooleanVar(value=s.get("fs_sounds", True))
+        self.fs_rumble = tk.BooleanVar(value=s.get("fs_rumble", True))
+        check(fs, "Sounds when you move around and choose things", self.fs_sounds,
+              lambda: self._save_flag("fs_sounds", self.fs_sounds)).pack(anchor="w")
+        check(fs, "Controller vibration on errors and save conflicts", self.fs_rumble,
+              lambda: self._save_flag("fs_rumble", self.fs_rumble)).pack(anchor="w")
         exe, args = launcher.app_command()
         args = " ".join(f'"{a}"' for a in args + ["--fullscreen"]).replace('"--fullscreen"', "--fullscreen")
         label(fs, f"AnyFSE: choose a Custom launcher with this program and the\nargument  {args}",
@@ -159,6 +165,10 @@ class SettingsDialog(tk.Toplevel):
     def _check_now(self):
         self.destroy()
         self.app.check_updates_now()
+
+    def _save_flag(self, key, var):
+        self.app.settings.data[key] = var.get()
+        self.app.settings.save()
 
     def _save_start_fs(self):
         self.app.settings.data["start_fullscreen"] = self.start_fs.get()
