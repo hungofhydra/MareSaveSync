@@ -24,7 +24,7 @@ from .. import APP_TITLE
 from ..core.diff import EXCLUDED, SAME
 from ..core.playtime import fmt_ago, fmt_play_long, fmt_play_short
 from ..info import format as info_format
-from . import gamepad
+from . import fs_sound, gamepad
 from .dialogs.conflict import ConflictDialog
 from .library import SORTS
 from .theme import WIN
@@ -50,6 +50,9 @@ KEYS = {"Left": "left", "Right": "right", "Up": "up", "Down": "down", "Return": 
         "Prior": "lb", "Next": "rb"}
 if WIN:
     KEYS["App"] = "start"                       # the keyboard's menu key
+MOVES = {"up", "down", "left", "right", "lb", "rb"}
+# Rumble patterns [(strength 0–1, seconds)]: two short knocks for an error, one long one for a save conflict
+RUMBLES = {"error": [(0.7, 0.12), (0, 0.08), (0.7, 0.12)], "conflict": [(0.45, 0.4)]}
 
 
 class FullscreenMixin:
@@ -126,7 +129,7 @@ class FullscreenMixin:
     def tell(self, title, text, kind="info"):
         """kind: "info" | "warning" | "error"."""
         if self.fs_on:
-            self._fs_ask(title, text, [("OK", None)], cancel=None)
+            self._fs_ask(title, text, [("OK", None)], cancel=None, alert=kind)
             return
         {"info": messagebox.showinfo, "warning": messagebox.showwarning,
          "error": messagebox.showerror}[kind](title, text, parent=self)
@@ -155,10 +158,11 @@ class FullscreenMixin:
         else:
             choices.append(("Decide later", "skip"))
         return self._fs_ask(f"Save conflict — {g}", "\n".join(lines), choices,
-                            cancel="cancel" if moment == "before" else "skip")
+                            cancel="cancel" if moment == "before" else "skip", alert="conflict")
 
-    def _fs_ask(self, title, text, choices, cancel):
-        """Show a question inside fullscreen mode and wait for the answer: the chosen value, or `cancel` for B."""
+    def _fs_ask(self, title, text, choices, cancel, alert=None):
+        """Show a question inside fullscreen mode and wait for the answer: the chosen value, or `cancel` for B.
+        alert: "error", "warning" or "conflict" get their own sound, and errors and conflicts a rumble."""
         lines = text.splitlines()
         if len(lines) > 16:
             text = "\n".join(lines[:15] + ["…"])
@@ -167,6 +171,7 @@ class FullscreenMixin:
         self._fs_prompts.append(pr)
         self.show_window()
         self._fs_render()
+        self._fs_alert(alert)
         try:
             self.wait_variable(var)
             i = var.get()
@@ -178,10 +183,47 @@ class FullscreenMixin:
             self._fs_render()
         return choices[i][1] if i >= 0 else cancel
 
+    # ------------------------------------------------------------ sounds and rumble
+    def fs_sound(self, name):
+        """Play one of fs_sound.SOUNDS, unless sounds are switched off (Settings)."""
+        if self.settings.data.get("fs_sounds", True):
+            fs_sound.play(name)
+
+    def fs_rumble(self, pattern):
+        """Shake the controller (see Gamepad.rumble), unless vibration is switched off (Settings)."""
+        if self.settings.data.get("fs_rumble", True) and self._fs_pad is not None:
+            self._fs_pad.rumble(pattern)
+
+    def _fs_alert(self, alert):
+        """A question appeared: its sound, and for errors and save conflicts the controller shakes."""
+        self.fs_sound({"error": "error", "conflict": "alert", "warning": "alert"}.get(alert, "prompt"))
+        if alert in RUMBLES:
+            self.fs_rumble(RUMBLES[alert])
+
+    def _fs_where(self):
+        """Where the focus is, to tell whether a direction moved it."""
+        pr = self._fs_prompts[-1] if self._fs_prompts else {}
+        return (self._fs_view, self._fs_focus, self._fs_btn, self._fs_menu, self._fs_row, self._fs_top,
+                getattr(self, "_fs_week", None), len(self._fs_prompts), pr.get("focus"), pr.get("row"),
+                pr.get("unit"))
+
     # ------------------------------------------------------------ input
     def _fs_input(self, b):
+        """A button: from the controller, a key, the mouse wheel or a tap. Handles it and plays its sound."""
         if not self.fs_on:
             return
+        if b in MOVES:                        # a tick only if the focus really moved (not at the end of a row)
+            before = self._fs_where()
+            self._fs_handle(b)
+            if self._fs_where() != before:
+                self.fs_sound("move")
+            return
+        typing = bool(self._fs_prompts) and self._fs_prompts[-1].get("kind") == "keyboard"
+        # played first: handling A can open a question and wait for its answer
+        self.fs_sound("move" if typing and b in ("a", "x", "y", "lb") else "back" if b == "b" else "select")
+        self._fs_handle(b)
+
+    def _fs_handle(self, b):
         self._fs_c.configure(cursor="none")   # steering with the controller: hide the mouse pointer
         if self._fs_prompts:
             pr = self._fs_prompts[-1]

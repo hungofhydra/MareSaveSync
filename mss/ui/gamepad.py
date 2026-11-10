@@ -27,6 +27,10 @@ class _State(ctypes.Structure):
     _fields_ = [("dwPacketNumber", ctypes.c_ulong), ("Gamepad", _Pad)]
 
 
+class _Vibration(ctypes.Structure):
+    _fields_ = [("wLeftMotorSpeed", ctypes.c_ushort), ("wRightMotorSpeed", ctypes.c_ushort)]
+
+
 def _load():
     if sys.platform != "win32":
         return None
@@ -37,6 +41,8 @@ def _load():
             continue
         dll.XInputGetState.argtypes = [ctypes.c_uint, ctypes.POINTER(_State)]
         dll.XInputGetState.restype = ctypes.c_uint
+        dll.XInputSetState.argtypes = [ctypes.c_uint, ctypes.POINTER(_Vibration)]
+        dll.XInputSetState.restype = ctypes.c_uint
         return dll
     return None
 
@@ -59,9 +65,39 @@ class Gamepad(threading.Thread):
         self.on_press, self.active = on_press, active
         self.stop_event = threading.Event()
         self._dll = _load()
+        self.slot: int | None = None              # the connected controller being read
+        self._rumble = 0                          # the newest rumble() call; an older one stops when it changes
 
     def stop(self):
         self.stop_event.set()
+        self._rumble += 1
+        if self.slot is not None:
+            self._motors(self.slot, 0)
+
+    def _motors(self, slot, strength):
+        """Both rumble motors: strength 0 (off) to 1."""
+        if self._dll is not None:
+            v = _Vibration(int(65535 * strength), int(65535 * strength * 0.6))    # heavy motor, light motor
+            self._dll.XInputSetState(slot, ctypes.byref(v))
+
+    def rumble(self, pattern):
+        """Shake the controller: pattern is [(strength 0–1, seconds), …], played in the background. Does nothing
+        without a controller (or one that can't rumble)."""
+        slot = self.slot
+        if self._dll is None or slot is None:
+            return
+        self._rumble += 1
+        mine = self._rumble
+
+        def run():
+            for strength, seconds in pattern:
+                if mine != self._rumble:
+                    return                        # a newer rumble (or stop) took over
+                self._motors(slot, strength)
+                time.sleep(seconds)
+            if mine == self._rumble:
+                self._motors(slot, 0)
+        threading.Thread(target=run, daemon=True).start()
 
     def run(self):
         if self._dll is None:
@@ -74,13 +110,14 @@ class Gamepad(threading.Thread):
             now = time.monotonic()
             if slot is None:                      # asking empty slots is slow, so only look once a second
                 if now >= next_scan:
-                    slot = next((i for i in range(4) if get(i)), None)
+                    self.slot = slot = next((i for i in range(4) if get(i)), None)
                     next_scan = now + 1.0
                 if slot is None:
                     time.sleep(0.25)
                     continue
             if not get(slot):                     # unplugged / turned off
-                slot, held = None, {}
+                self.slot = slot = None
+                held = {}
                 continue
             pressed = self._pressed(state.Gamepad)
             if not self.active():

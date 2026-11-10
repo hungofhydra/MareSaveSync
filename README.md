@@ -78,8 +78,11 @@ other Windows handhelds (their built-in controls count as an Xbox controller).
   programs when you press Play, and one with no save folder has **Find save folder** on its page.
 - Save conflicts and sync questions appear inside fullscreen mode, so you answer them with the controller.
 - Fullscreen mode stays open behind the game while you play and comes back to the front when it closes.
-- **☰ → Settings:** start in fullscreen mode, start with Windows, mirror deletions, update checks, the SteamGridDB
-  key and this PC's name (typed on the on-screen keyboard). **A** changes the selected one.
+- **Sounds and vibration:** moving, choosing and going back make quiet sounds, and a question has its own. The
+  controller vibrates when something fails (two short knocks) or a save conflict needs you (one long one). Both
+  can be switched off in ☰ → Settings, or in the desktop Settings → Fullscreen mode.
+- **☰ → Settings:** sounds, vibration, start in fullscreen mode, start with Windows, mirror deletions, update
+  checks, the SteamGridDB key and this PC's name (typed on the on-screen keyboard). **A** changes the selected one.
 - A game's page → **⋯ More:** **Show save files** lists the comparison with the cloud (differences first; **A** on a
   file shows both sides and can exclude it or its folder, **X** compares again), plus Sync automatically, Launch
   options and Look for the save folder again.
@@ -178,7 +181,8 @@ mss/
     app.py              main window, built from mixins:
     library.py  details.py  play.py  sync.py  artwork.py  info.py (About tab)  savefind.py (finding save folders)
     update.py           the Update button, Help → Check for updates…
-    fullscreen.py       fullscreen mode (controller UI); gamepad.py reads the Xbox controller (XInput)
+    fullscreen.py       fullscreen mode (controller UI); gamepad.py reads the Xbox controller (XInput) and
+                        makes it rumble;  fs_sound.py  its sounds (generated tones)
     fs_keyboard.py      the on-screen keyboard;  fs_add.py  Add game in fullscreen mode
     fs_settings.py      settings, a game's options and its save files in fullscreen mode;  fs_stats.py  playtime
     theme.py  widgets.py  theme_art.py (banner/icon drawing)
@@ -248,7 +252,8 @@ source — that folder keeps the original “SaveSync” name so existing settin
 
 - This PC's settings (which folder each game uses here, sync baseline): `data\config.json`
 - Google sign-in: `data\token.json` (Settings → Sign out removes it)
-- Cached cover art: `data\art\`; backups: `data\backups\`; the list of save locations: `data\ludusavi.json`
+- Cached cover art: `data\art\`; backups: `data\backups\`; the list of save locations: `data\ludusavi.json`;
+  fullscreen mode's sounds: `data\sounds\` (made by the app the first time each is played)
 - The log: `data\logs\MareSaveSync.log` (about the last 3 MB). **Help → Log…** shows it, with **Errors only**
   and **Copy for bug report**, which copies the app and Windows versions, the storage type and the end of the
   log with your user name taken out of paths. Paste that into a GitHub issue (**Report a problem on GitHub…**).

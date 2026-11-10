@@ -34,7 +34,10 @@ class FsSettingsMixin:
         """[(label, value shown, action or None)]."""
         d = self.settings.data
         on = lambda v: "On" if v else "Off"  # noqa: E731
-        rows = [("Start in Fullscreen mode", on(d.get("start_fullscreen")), self._fs_toggle("start_fullscreen")),
+        rows = [("Sounds in Fullscreen mode", on(d.get("fs_sounds", True)), self._fs_toggle("fs_sounds", True)),
+                ("Controller vibration on errors and save conflicts", on(d.get("fs_rumble", True)),
+                 self._fs_toggle_rumble),
+                ("Start in Fullscreen mode", on(d.get("start_fullscreen")), self._fs_toggle("start_fullscreen")),
                 ("Start with Windows (minimized)", on(launcher.get_startup()), self._fs_toggle_startup),
                 ("Mirror deletions when syncing", on(self.mirror_var.get()), self._fs_toggle_mirror),
                 ("Check for updates automatically", on(d.get("check_updates", True)),
@@ -58,6 +61,10 @@ class FsSettingsMixin:
             self.settings.data[key] = not self.settings.data.get(key, default)
             self.settings.save()
         return flip
+
+    def _fs_toggle_rumble(self):
+        self._fs_toggle("fs_rumble", True)()
+        self.fs_rumble([(0.45, 0.25)])          # switched on: this is what it feels like
 
     def _fs_toggle_startup(self):
         try:
