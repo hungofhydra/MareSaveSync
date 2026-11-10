@@ -95,6 +95,10 @@ Only one copy of the app runs at a time. Starting it again (from AnyFSE, a short
 already running — for example the one waiting in the tray after **Start with Windows** — to the front;
 with `--fullscreen` it switches to fullscreen mode.
 
+**The tray icon** (next to the clock; minimizing puts the app there): click it to open the
+app, or right-click for your 6 most recently played games: pick one to play it straight from the tray (its saves
+sync as usual; a game that's running shows as playing). The menu also opens Fullscreen mode and exits.
+
 ## Install (each PC)
 
 **Easiest:** copy the `MareSaveSync` folder to each PC — a USB stick works too — and double-click
@@ -141,9 +145,11 @@ release workflow run `build.py`.
 ### Releases
 
 Every push to `main`/`master` builds the app on GitHub Actions (`.github/workflows/release.yml`) and publishes a
-release `v<version>.<run number>` with `MareSaveSync-…-windows.zip` — unzip it anywhere and run
-`MareSaveSync\MareSaveSync.exe`. The version comes from `VERSION` in `mss/__init__.py`; the workflow passes its run
-number to `build.py` (`MSS_BUILD`), which builds it into the exe so the app knows which release it is and can
+release `v<major>.<minor>.<patch>` with `MareSaveSync-…-windows.zip` — unzip it anywhere and run
+`MareSaveSync\MareSaveSync.exe`. `VERSION` in `mss/__init__.py` is the major.minor (e.g. `3.1`); the patch counts
+`main`'s commits since `VERSION` last changed (`python build.py --release`), so the commit that changes `VERSION` is
+`.0` and each later one adds 1. To release a new minor or major version, change `VERSION`. The workflow passes the
+patch to `build.py` (`MSS_BUILD`), which builds it into the exe so the app knows which release it is and can
 update itself (`mss/updater.py`). Google sign-in is built
 in from the repository secrets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (Settings → Secrets and variables →
 Actions); without them the release still builds, just without built-in sign-in.

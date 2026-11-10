@@ -44,17 +44,17 @@ def parse(tag: str) -> tuple[int, ...]:
 
 
 def current() -> tuple[int, ...]:
-    return parse(VERSION) + ((BUILD,) if BUILD else ())
+    return parse(VERSION) + ((BUILD,) if BUILD is not None else ())
 
 
 def current_text() -> str:
-    return f"v{VERSION}.{BUILD}" if BUILD else f"v{VERSION}"
+    return f"v{VERSION}.{BUILD}" if BUILD is not None else f"v{VERSION}"
 
 
 def can_update() -> bool:
     """Only a released build can update itself (one run from source or built on this PC doesn't know which
     release it is)."""
-    return FROZEN and bool(BUILD)
+    return FROZEN and BUILD is not None
 
 
 def check() -> dict | None:
