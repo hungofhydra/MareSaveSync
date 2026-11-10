@@ -244,7 +244,7 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
     def _start_menu(self):
         m = menu(self)
         m.add_command(label="Add game…", command=self.new_game)
-        recent = sorted(self.all_games, key=lambda g: -self.stats_all.get(g, {}).get("last_played", 0))[:6]
+        recent = self.recent_games(6)
         if recent:
             m.add_separator()
             for g in recent:

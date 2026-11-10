@@ -19,6 +19,11 @@ class PlayMixin:
 
     other_pcs: list = []                        # the other PCs' playtime docs ({"device_id", "device", "games"})
 
+    def recent_games(self, n) -> list[str]:
+        """The n most recently played games (then the rest by name), for the Start and tray menus."""
+        return sorted(self.all_games, key=lambda g: (-(self.stats_all.get(g, {}).get("last_played") or 0),
+                                                     g.lower()))[:n]
+
     def pc_stats(self) -> list[dict]:
         """Every PC's playtime, this one last: [{"device_id", "device", "games": {game: {seconds, last_played,
         days?}}, "me": bool}]."""
@@ -191,6 +196,7 @@ class PlayMixin:
                                     lambda game, secs, err: self.q.put(("game_end", game, secs, err)),
                                     attach_started=attach_started)
         self.sessions[g] = sess
+        self.refresh_tray_menu()
         sess.start()
         self.note(f"Playing {g}" if not attach_started else f"{g} was started outside the app — tracking it")
         self.task_game.configure(text=f"▶ {', '.join(self.sessions)}")
@@ -229,6 +235,7 @@ class PlayMixin:
 
     def _on_game_end(self, g, seconds, err):
         self.sessions.pop(g, None)
+        self.refresh_tray_menu()
         self.set_tray_text(f"playing {', '.join(self.sessions)}" if self.sessions else "")
         if not self.sessions:
             self.task_game.pack_forget()

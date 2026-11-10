@@ -45,6 +45,7 @@ class LibraryMixin:
 
     def resort(self):
         """Put the library back in order after playtime changed (a game closed, other PCs' playtime arrived)."""
+        self.refresh_tray_menu()
         if self.settings.data.get("library_sort", "name") in ("last_played", "playtime"):
             self._debounce("resort", 150, lambda: self._apply_filter(keep_open=True))
 
@@ -171,6 +172,7 @@ class LibraryMixin:
         if self.game and self.game not in self.all_games:
             self.show_library()
         self._update_controls()
+        self.refresh_tray_menu()
 
     def _apply_filter(self, open_first=False, keep_open=False):
         """Filter the library by the search box and sort it. keep_open: only re-sort; the open game stays open."""
