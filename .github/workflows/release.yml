@@ -1,5 +1,6 @@
 # On every push to main/master: build the portable Windows app and publish it as a GitHub release
-# (MareSaveSync-v<version>.<run>-windows.zip containing the MareSaveSync folder).
+# v<major>.<minor>.<patch> (MareSaveSync-v<…>-windows.zip containing the MareSaveSync folder). The patch counts
+# main's commits since VERSION in mss/__init__.py last changed (see build.py), so changing VERSION starts at .0.
 name: Build and release
 
 on:
@@ -19,6 +20,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # the whole history: the release number counts commits (build.py --release)
 
       - uses: actions/setup-python@v5
         with:
@@ -48,16 +51,29 @@ jobs:
             Write-Output "::warning::GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET secrets not set: building without Google sign-in."
           }
 
+      - name: Release version
+        id: ver
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $release = python build.py --release
+          if ($LASTEXITCODE -ne 0 -or $release -notmatch '^\d+\.\d+\.\d+$') { Write-Output "::error::No release version ($release)"; exit 1 }
+          gh release view "v$release" *> $null
+          if ($LASTEXITCODE -eq 0) { Write-Output "::error::Release v$release already exists"; exit 1 }
+          "version=v$release" >> $env:GITHUB_OUTPUT
+          "patch=$($release.Split('.')[2])" >> $env:GITHUB_OUTPUT
+
       - name: Build
         env:
-          MSS_BUILD: ${{ github.run_number }}     # the exe knows its release (v<version>.<run>) to update itself
+          MSS_BUILD: ${{ steps.ver.outputs.patch }}     # the exe knows its release to update itself
         run: python build.py
 
       - name: Zip
         id: pkg
         shell: pwsh
         run: |
-          $version = "v$(python build.py --version).${{ github.run_number }}"
+          $version = "${{ steps.ver.outputs.version }}"
           $zip = "MareSaveSync-$version-windows.zip"
           Remove-Item .env -ErrorAction SilentlyContinue
           Compress-Archive -Path dist\MareSaveSync -DestinationPath $zip
