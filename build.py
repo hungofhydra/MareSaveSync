@@ -6,11 +6,11 @@ An existing dist/MareSaveSync/data folder (settings of a copy you ran from there
 
     python build.py            build
     python build.py --version  print the app version (major.minor, VERSION in mss/__init__.py)
-    python build.py --release  print this commit's release version: <major>.<minor>.<patch>
+    python build.py --release  print the next release's version: <major>.<minor>.<patch>
 
-Releases are v<major>.<minor>.<patch>. The patch is how many commits there are on this branch (following
-first parents, i.e. main's own history) since VERSION was last changed: the commit that sets 3.1 is v3.1.0, the
-next v3.1.1, and so on. To start a new minor or major version, change VERSION.
+Releases are v<major>.<minor>.<patch>. The patch is one more than the highest v<major>.<minor>.* release tag
+there is (0 for the first): the first release of 3.1 is v3.1.0, the next v3.1.1, and so on, and a build that
+fails doesn't use up a number. To start a new minor or major version, change VERSION.
 
 The release workflow sets MSS_BUILD to the patch: the exe knows which release it is and can update itself
 (mss/updater.py). Without it (a build made on this PC) the exe doesn't update itself.
@@ -33,28 +33,13 @@ def version() -> str:
     return VERSION
 
 
-def _git(*args) -> str:
-    return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=True).stdout
-
-
-def _version_at(sha: str) -> str | None:
-    try:
-        text = _git("show", f"{sha}:mss/__init__.py")
-    except subprocess.CalledProcessError:
-        return None
-    m = re.search(r'^VERSION = "([^"]+)"', text, re.M)
-    return m.group(1) if m else None
-
-
 def release() -> str:
-    """<major>.<minor>.<patch> of the commit that's checked out (needs the full history: fetch-depth 0)."""
+    """The next release's <major>.<minor>.<patch>, from the release tags (the workflow fetches them)."""
     v = version()
-    patch = 0
-    for sha in _git("rev-list", "--first-parent", "HEAD").split()[1:]:
-        if _version_at(sha) != v:
-            break
-        patch += 1
-    return f"{v}.{patch}"
+    tags = subprocess.run(["git", "tag", "--list", f"v{v}.*"], cwd=ROOT, capture_output=True, text=True,
+                          check=True).stdout.split()
+    patches = [int(m.group(1)) for t in tags if (m := re.fullmatch(rf"v{re.escape(v)}\.(\d+)", t))]
+    return f"{v}.{max(patches) + 1 if patches else 0}"
 
 
 def build() -> int:

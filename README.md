@@ -146,9 +146,10 @@ release workflow run `build.py`.
 
 Every push to `main`/`master` builds the app on GitHub Actions (`.github/workflows/release.yml`) and publishes a
 release `v<major>.<minor>.<patch>` with `MareSaveSync-…-windows.zip` — unzip it anywhere and run
-`MareSaveSync\MareSaveSync.exe`. `VERSION` in `mss/__init__.py` is the major.minor (e.g. `3.1`); the patch counts
-`main`'s commits since `VERSION` last changed (`python build.py --release`), so the commit that changes `VERSION` is
-`.0` and each later one adds 1. To release a new minor or major version, change `VERSION`. The workflow passes the
+`MareSaveSync\MareSaveSync.exe`. `VERSION` in `mss/__init__.py` is the major.minor (e.g. `3.1`); the patch is one
+more than the highest existing `v3.1.*` release (`python build.py --release`), so the first release after changing
+`VERSION` is `.0` and each push after it adds 1 (a failed build doesn't use up a number). To release a new minor or
+major version, change `VERSION`. The workflow passes the
 patch to `build.py` (`MSS_BUILD`), which builds it into the exe so the app knows which release it is and can
 update itself (`mss/updater.py`). Google sign-in is built
 in from the repository secrets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (Settings → Secrets and variables →

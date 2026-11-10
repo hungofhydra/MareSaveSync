@@ -1,6 +1,6 @@
 # On every push to main/master: build the portable Windows app and publish it as a GitHub release
-# v<major>.<minor>.<patch> (MareSaveSync-v<…>-windows.zip containing the MareSaveSync folder). The patch counts
-# main's commits since VERSION in mss/__init__.py last changed (see build.py), so changing VERSION starts at .0.
+# v<major>.<minor>.<patch> (MareSaveSync-v<…>-windows.zip containing the MareSaveSync folder). The patch is one more
+# than the highest existing release of VERSION in mss/__init__.py (see build.py), so changing VERSION starts at .0.
 name: Build and release
 
 on:
@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0       # the whole history: the release number counts commits (build.py --release)
+          fetch-depth: 0       # with the tags: the next release number follows the last one (build.py --release)
 
       - uses: actions/setup-python@v5
         with:
@@ -54,13 +54,10 @@ jobs:
       - name: Release version
         id: ver
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           $release = python build.py --release
           if ($LASTEXITCODE -ne 0 -or $release -notmatch '^\d+\.\d+\.\d+$') { Write-Output "::error::No release version ($release)"; exit 1 }
-          gh release view "v$release" *> $null
-          if ($LASTEXITCODE -eq 0) { Write-Output "::error::Release v$release already exists"; exit 1 }
+          Write-Output "Releasing v$release"
           "version=v$release" >> $env:GITHUB_OUTPUT
           "patch=$($release.Split('.')[2])" >> $env:GITHUB_OUTPUT
 
