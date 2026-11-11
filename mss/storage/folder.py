@@ -10,7 +10,7 @@ from .. import CLOUD_ROOT, LEGACY_CLOUD_ROOT
 from ..core.scan import scan_folder
 from ..core.util import TMP_SUFFIX, prune_empty_dirs, safe_name
 from .common import (ART_JSON, ART_SUB, CONFIG_NAME, INFO_JSON, LEGACY_ART_DIR, LEGACY_STATS_DIR, PLAYTIME_SUB,
-                     _group_playtime, _playtime_entry, _replace, _write_json)
+                     SHARED_JSON, _group_playtime, _playtime_entry, _replace, _write_json)
 
 
 class FolderBackend:
@@ -231,6 +231,18 @@ class FolderBackend:
 
     def delete_art_file(self, name, fname):
         (self._art_dir(name) / fname).unlink(missing_ok=True)
+
+    # ------------------------------------------------- settings kept for every PC
+    def read_shared(self) -> dict:
+        p = self.root / SHARED_JSON
+        try:
+            doc = json.loads(p.read_text("utf-8")) if p.is_file() else {}
+        except (OSError, ValueError):
+            return {}
+        return doc if isinstance(doc, dict) else {}
+
+    def write_shared(self, doc: dict) -> None:
+        _write_json(self.root / SHARED_JSON, doc)
 
     # ----------------------------------------------------------- game info
     def read_info(self, name):
