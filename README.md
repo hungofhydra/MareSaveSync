@@ -45,6 +45,24 @@ IGDB has covers and artwork/screenshots but no logos. Games already showing art 
   game's page shows its hours on each PC. Weekly numbers start with the first session played on this version: older playtime only
   has totals, not dates.
 
+## Commands before and after a game
+
+For things like switching the audio device or display mode, closing an overlay or starting a helper. Game tab →
+**Command before launching** / **Command after it closes** (in fullscreen mode: the game's ⋯ More). They are kept
+per PC, like the launch options, and work for emulated games too.
+
+- Written as on a command line and run by Windows' own shell, in the game's (or emulator's) folder, with no
+  window. Variables: `%MSS_GAME%` (the game's name), `%MSS_PROGRAM%` (the program Play starts) and, after the game,
+  `%MSS_SECONDS%` (how long it was played).
+- **Before:** Play waits for it to finish (up to 2 minutes) before the game starts, after syncing down the saves.
+  If it fails or runs too long you're asked “Play anyway?”. To start a program that should stay open, use
+  `start "" "C:\Path\helper.exe"` so the command ends right away.
+- **After:** runs when the game closes, alongside the save upload (which doesn't wait for it), and also if the game
+  couldn't start, so it can undo what the first command did. A failure is only written to the log.
+- Only for games Play started; one started outside the app (Steam, a shortcut) runs neither command.
+- The on-screen keyboard can't type every character (no `\` or `%`), so enter longer commands on the desktop;
+  fullscreen mode can read, replace or clear them.
+
 ## Emulators
 
 - **Set up an emulator once per PC:** Settings → Emulators… → **Add emulator…** and pick its program. The arguments

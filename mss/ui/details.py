@@ -152,6 +152,19 @@ class DetailsMixin:
         ae.pack(side="left", fill="x", expand=True, padx=6)
         ae.bind("<FocusOut>", lambda e: self._save_args())
         ae.bind("<Return>", lambda e: self._save_args())
+        self.cmd_vars = {}
+        for key, text in (("before_cmd", "Command before launching:"), ("after_cmd", "Command after it closes:")):
+            r = tk.Frame(gt, bg=T["face"])
+            r.pack(fill="x", pady=(6, 0))
+            label(r, text, width=24, anchor="w").pack(side="left")
+            self.cmd_vars[key] = tk.StringVar()
+            ce = tk.Entry(r, textvariable=self.cmd_vars[key], **self._field(r))
+            ce.pack(side="left", fill="x", expand=True, padx=6)
+            ce.bind("<FocusOut>", lambda e, k=key: self._save_cmd(k))
+            ce.bind("<Return>", lambda e, k=key: self._save_cmd(k))
+        label(gt, "Run on this PC in the game's folder; to start a program that stays open use  start \"\" app.exe.  "
+                  "Variables: %MSS_GAME%  %MSS_PROGRAM%  %MSS_SECONDS%",
+              muted=True, justify="left").pack(anchor="w", pady=(2, 0))
         self.auto_var = tk.BooleanVar(value=True)
         check(gt, "Sync automatically: download saves before playing, upload them after the game closes",
               self.auto_var, self._save_auto).pack(anchor="w", pady=(8, 0))
@@ -272,6 +285,8 @@ class DetailsMixin:
         self.exe_lbl.configure(text=exe if exe else "Not set — choose the game's .exe to use Play")
         self._render_runner(gs)
         self.args_var.set(gs.get("args", ""))
+        for key, var in self.cmd_vars.items():
+            var.set(gs.get(key, ""))
         self.auto_var.set(gs.get("auto_sync", True))
         allp = self.stats_all.get(g, {}).get("seconds", 0)
         per_pc = [(pc.get("device") or "PC") + (" (this PC)" if pc["me"] else "") + f": {fmt_play_long(s)}"

@@ -19,6 +19,12 @@ STATUS = {CHANGED: ("Different", FS["amber"]), LOCAL_ONLY: ("▲  Only on this P
 ORDER = {CHANGED: 0, LOCAL_ONLY: 1, CLOUD_ONLY: 1, SAME: 2, EXCLUDED: 3}
 
 
+def _short(text, n=34):
+    """A command for a menu line: "none", or the start of it."""
+    text = (text or "").strip()
+    return "none" if not text else text if len(text) <= n else text[:n - 1] + "…"
+
+
 class FsSettingsMixin:
     """Part of App (see ui/app.py)."""
 
@@ -185,7 +191,9 @@ class FsSettingsMixin:
         auto = gs.get("auto_sync", True)
         choices = [("Show save files", "files"),
                    (f"Sync automatically when playing: {'On' if auto else 'Off'}", "auto"),
-                   (f"Launch options: {gs.get('args') or 'none'}", "args")]
+                   (f"Launch options: {gs.get('args') or 'none'}", "args"),
+                   (f"Before launching: {_short(gs.get('before_cmd'))}", "before_cmd"),
+                   (f"After it closes: {_short(gs.get('after_cmd'))}", "after_cmd")]
         if gs.get("local_path") and self.backend is not None:
             choices.append(("Look for the save folder again", "find"))
         choices.append(("Close", None))
@@ -206,6 +214,16 @@ class FsSettingsMixin:
                 self.settings.save()
                 if self.game == g:
                     self.args_var.set(args)
+        elif pick in ("before_cmd", "after_cmd"):
+            when = "before the game starts" if pick == "before_cmd" else "after the game closes"
+            text = self.fs_type(f"Command {when} — {g}", gs.get(pick, ""),
+                                f"Runs {when}. Leave it empty for none. Longer commands are easier to enter "
+                                "on the desktop (the game's Game tab).")
+            if text is not None:
+                self.settings.game(g)[pick] = text
+                self.settings.save()
+                if self.game == g:
+                    self.cmd_vars[pick].set(text)
         elif pick == "find":
             self.when_idle(lambda: self.find_saves(g, explicit=True))
 
