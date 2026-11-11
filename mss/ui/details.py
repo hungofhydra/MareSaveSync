@@ -52,6 +52,7 @@ class DetailsMixin:
         nb = ttk.Notebook(f)
         nb.pack(fill="both", expand=True, pady=(8, 0))
         self._build_about_tab(nb)
+        self._build_mine_tab(nb)
 
         # saves tab
         dt = tk.Frame(nb, bg=T["face"], padx=6, pady=6)
@@ -306,6 +307,7 @@ class DetailsMixin:
                        f"{fmt_time(ls['time'])}" if ls else "Never synced from this PC")
         self.play_btn.configure(text="■  Playing…" if g in self.sessions else "▶  Play")
         self._render_about()
+        self._render_mine()
 
     # -------------------------------------------------------- run with an emulator
     OWN_PROGRAM, SET_UP = "Its own program (.exe)", "Set up emulators…"
@@ -614,6 +616,7 @@ class DetailsMixin:
                     lambda r: self._apply_scan(game, r))
 
     def _apply_scan(self, game, res):
+        self._remember_mine(game, res[0].get("mine"))
         if game != self.game:
             return
         self.cfg, self.local_scan, self.cloud_scan = res

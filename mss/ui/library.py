@@ -5,9 +5,11 @@ import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
 from .. import APP_TITLE
+from ..core import mine
 from ..core.playtime import fmt_play_short
 from .dialogs.metadata import MetadataDialog
 from .dialogs.remove import RemoveDialog
+from .mine import CHIP
 from .theme import GRID_BG, TILE_H, TILE_W, UI, UIB, T
 from .widgets import Btn, label, menu
 
@@ -65,6 +67,12 @@ class LibraryMixin:
         sort.pack(side="left")
         sort.bind("<<ComboboxSelected>>", lambda e: (
             self._set_sort(next(k for k, v in SORTS.items() if v == self.sort_var.get())), sort.selection_clear()))
+        label(tb, "Show:").pack(side="left", padx=(12, 4))
+        self.show_var = tk.StringVar(value="All games")
+        self.show_box = ttk.Combobox(tb, textvariable=self.show_var, values=["All games"], state="readonly",
+                                     width=20, font=UI)
+        self.show_box.pack(side="left")
+        self.show_box.bind("<<ComboboxSelected>>", lambda e: self._set_show())
         label(tb, "Double-click a cover to open it  ·  right-click for Play and more", muted=True).pack(side="right")
         gf = tk.Frame(f, relief="sunken", bd=2, bg=GRID_BG)
         gf.pack(fill="both", expand=True)
@@ -126,6 +134,9 @@ class LibraryMixin:
             self._chip(x + TILE_W - 4, y + 4, "☁ Cloud is newer", "#1f4fbf", anchor="ne", tags=tid)
         elif state == "changes":
             self._chip(x + TILE_W - 4, y + 4, "▲ Not uploaded", "#8a5a00", anchor="ne", tags=tid)
+        status = self.mine(g).get("status")
+        if status:
+            self._chip(x + 4, y + TILE_H - 26, mine.STATUSES[status], CHIP[status], tags=tid)
         gs = self.settings.data["games"].get(g, {})
         ready = gs.get("local_path") or gs.get("exe") or gs.get("rom")
         t = c.create_text(x + TILE_W / 2, y + TILE_H + 12, text=g, width=TILE_W + 14, justify="center",
@@ -160,6 +171,11 @@ class LibraryMixin:
         m.add_separator()
         m.add_command(label="Set game executable…", command=lambda: self.pick_exe(g))
         m.add_command(label="Game info & artwork…", command=lambda: MetadataDialog(self, g))
+        sm = menu(m)
+        for key, name in {None: "No status", **mine.STATUSES}.items():
+            sm.add_command(label=("✓  " if self.mine(g).get("status") == key else "     ") + name,
+                           command=lambda k=key: self.set_mine(g, status=k))
+        m.add_cascade(label="Status", menu=sm)
         m.add_separator()
         m.add_command(label="Remove from library…", command=lambda: self.remove_game(g))
         m.tk_popup(ev.x_root, ev.y_root)
@@ -168,6 +184,7 @@ class LibraryMixin:
         self.all_games = list(games)
         if select and select not in self.games:
             self.search_var.set("")
+        self._refresh_show_box()
         self._apply_filter()
         if self.game and self.game not in self.all_games:
             self.show_library()
@@ -177,7 +194,10 @@ class LibraryMixin:
     def _apply_filter(self, open_first=False, keep_open=False):
         """Filter the library by the search box and sort it. keep_open: only re-sort; the open game stays open."""
         q = self.search_var.get().strip().lower()
-        games = [g for g in self.all_games if q in g.lower()] if q else list(self.all_games)
+        games = [g for g in self.all_games if q in g.lower() or mine.has_tag(self.mine(g), q)] if q \
+            else list(self.all_games)
+        if self.show_key:
+            games = [g for g in games if mine.passes(self.mine(g), self.show_key)]
         self.games = sorted(games, key=self.sort_key(self.settings.data.get("library_sort", "name")))
         n, t = len(self.games), len(self.all_games)
         self.count_lbl.configure(text=f"{t} game{'s' if t != 1 else ''}" if n == t else f"{n} of {t} games")
@@ -262,6 +282,7 @@ class LibraryMixin:
             d = self.settings.data
             d["art_cache"].pop(g, None)
             d["info_cache"].pop(g, None)
+            self.forget_mine(g)
             if purge:                     # keep this PC's folder/exe choice when only hiding, so re-adding restores it
                 d.get("games", {}).pop(g, None)
                 d.get("my_stats", {}).pop(g, None)

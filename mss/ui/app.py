@@ -23,6 +23,7 @@ from .fullscreen import FullscreenMixin
 from .dialogs.settings import SettingsDialog
 from .info import InfoMixin
 from .library import LibraryMixin
+from .mine import MineMixin
 from .play import PlayMixin
 from .savefind import SaveFindMixin
 from .sync import CHECK_EVERY_MS, SyncMixin
@@ -42,8 +43,9 @@ except Exception:            # Pillow missing: plain gradient banner, no mascot 
     ImageTk = theme_art = None
 
 
-class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMixin, SaveFindMixin, FullscreenMixin,
-          FsKeyboardMixin, FsAddMixin, FsStatsMixin, FsSettingsMixin, TrayMixin, UpdateMixin, tk.Tk):
+class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, MineMixin, PlayMixin, SyncMixin, SaveFindMixin,
+          FullscreenMixin, FsKeyboardMixin, FsAddMixin, FsStatsMixin, FsSettingsMixin, TrayMixin, UpdateMixin,
+          tk.Tk):
     def __init__(self, start_minimized=False, start_fullscreen=False):
         super().__init__()
         self.title(APP_TITLE)
@@ -59,6 +61,8 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
         self.settings = Settings()
         self.settings.data.setdefault("art_cache", {})
         self.settings.data.setdefault("info_cache", {})
+        self.settings.data.setdefault("mine_cache", {})       # your status / tags / notes per game (core/mine.py)
+        self.settings.data.setdefault("mine_unsent", [])      # games whose changes couldn't be saved to the cloud
         self.backend = None
         self.all_games: list[str] = []
         self.games: list[str] = []
@@ -76,6 +80,9 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
         self.art_q: queue.Queue = queue.Queue()
         self.info_q: queue.Queue = queue.Queue()
         self.state_q: queue.Queue = queue.Queue()
+        self.mine_q: queue.Queue = queue.Queue()
+        self._mine_pending: dict = {}           # game -> changes of its notes etc. not yet written to the cloud
+        self._show_choices: dict = {"": "All games"}
         self._info_pending: set = set()         # games whose info is being reloaded
         self._state_times: dict = {}            # game -> when its sync state was last set
         self.photos: dict = {}
@@ -91,6 +98,7 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
         self._start_tray()
         threading.Thread(target=self._art_worker, daemon=True).start()
         threading.Thread(target=self._info_worker, daemon=True).start()
+        threading.Thread(target=self._mine_worker, daemon=True).start()
         threading.Thread(target=self._watch_games, daemon=True).start()
         threading.Thread(target=self._state_worker, daemon=True).start()
         self.after(CHECK_EVERY_MS, self._periodic_state_check)
@@ -384,6 +392,10 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
                     self._remember_art(item[1], item[2])
                 elif kind == "info":
                     self._remember_info(item[1], item[2])
+                elif kind == "mine":
+                    self._remember_mine(item[1], item[2])
+                elif kind == "mine_saved":
+                    self._mine_saved(item[1], item[2])
                 elif kind == "tray":
                     self._tray_event(item[1])
                 elif kind == "game_detected":

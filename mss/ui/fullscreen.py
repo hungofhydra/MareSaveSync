@@ -21,6 +21,7 @@ from tkinter import font as tkfont
 from tkinter import messagebox
 
 from .. import APP_TITLE
+from ..core import mine
 from ..core.diff import EXCLUDED, SAME
 from ..core.playtime import fmt_ago, fmt_play_long, fmt_play_short
 from ..info import format as info_format
@@ -276,8 +277,8 @@ class FullscreenMixin:
             if b == "y" and self.all_games:
                 self.after_idle(self._fs_search)
                 return
-            if b == "b" and self._fs_query:
-                self._fs_query = ""
+            if b == "b" and (self._fs_query or self.fs_show):
+                self._fs_query = self.fs_show = ""
                 self._fs_render()
                 return
         games = self._fs_games()
@@ -317,7 +318,10 @@ class FullscreenMixin:
         chosen in the ☰ menu."""
         q = self._fs_query.lower()
         games = [g for g in self.all_games
-                 if q in g.lower() or q in (self.game_info(g).get("name") or "").lower()] if q else self.all_games
+                 if q in g.lower() or q in (self.game_info(g).get("name") or "").lower()
+                 or mine.has_tag(self.mine(g), q)] if q else self.all_games
+        if self.fs_show:
+            games = [g for g in games if mine.passes(self.mine(g), self.fs_show)]
         return sorted(games, key=self.sort_key(self.settings.data.get("fs_sort", "last_played")))
 
     def _fs_search(self):
@@ -386,6 +390,9 @@ class FullscreenMixin:
             items += [("Add game", self.fs_add_game), ("Refresh library", self.reload_games)]
         if self.all_games:
             items += [("Search", self._fs_search), ("Playtime stats", self.fs_open_stats)]
+            if any(k.startswith("status:") for k in self._show_choices):    # some game has a status
+                items.append((f"Show: {self._show_choices.get(self.fs_show, 'All games').split('  (')[0]}",
+                              self.fs_pick_show))
         elif self.settings.data.get("backend") == "gdrive":
             items.append(("Sign in with Google", lambda: self.connect(interactive=True)))
         else:
@@ -617,6 +624,10 @@ class FullscreenMixin:
         out = []
         if g in self.sessions:
             out.append(("▶  Playing now", FS["green"]))
+        status = self.mine(g).get("status")
+        if status:
+            out.append((mine.STATUSES[status], {"playing": FS["blue"], "on_hold": FS["amber"],
+                                                "completed": FS["green"]}.get(status, FS["button"])))
         gs = self.settings.data["games"].get(g, {})
         chip = {"synced": ("✓  Synced", FS["green"]), "cloud_newer": ("☁  Cloud is newer", FS["blue"]),
                 "changes": ("▲  Not uploaded", FS["amber"]), "conflict": ("⚠  Conflict", FS["red"])}.get(gs.get("state"))
@@ -662,6 +673,11 @@ class FullscreenMixin:
             cx = self._fs_chip(cx, y, text, color) + p(12)
         if chips:
             y += p(40)
+        tags = mine.tags_text(self.mine(g))
+        if tags:
+            t = c.create_text(x, y, text="Tags:  " + tags, width=width, anchor="nw", fill=FS["dim"],
+                              font=self._fs_font(17))
+            y = c.bbox(t)[3] + p(14)
         if not found:
             return
         lines = []
@@ -698,8 +714,10 @@ class FullscreenMixin:
             self._fs_start = i - n + 1
         start = self._fs_start
         n_text = f"{len(games)} game{'s' if len(games) != 1 else ''}"
-        title = (f"SEARCH  “{self._fs_query}”   ·   {len(games)} of {len(self.all_games)} games" if self._fs_query
-                 else f"LIBRARY   ·   {n_text}")
+        shown = self._show_choices.get(self.fs_show, "").split("  (")[0].upper() if self.fs_show else ""
+        title = (f"SEARCH  “{self._fs_query}”" + (f"   ·   {shown}" if shown else "")
+                 + f"   ·   {len(games)} of {len(self.all_games)} games" if self._fs_query
+                 else f"{shown}   ·   {n_text}" if shown else f"LIBRARY   ·   {n_text}")
         c.create_text(x0, top - p(40), text=title, anchor="w", fill=FS["sub"], font=self._fs_font(16, semi=True))
         if start > 0:
             c.create_text(x0 - p(30), top + th // 2, text="◀", fill=FS["sub"], font=self._fs_font(22))
@@ -777,8 +795,9 @@ class FullscreenMixin:
             title = "Connecting…" if self.busy else "Not connected"
             text = ("Open the menu (☰) to sign in or connect. Storage is set up in desktop mode → Settings."
                     if not self.busy else "")
-        elif self._fs_query:
-            title = f"No games match “{self._fs_query}”"
+        elif self._fs_query or self.fs_show:
+            title = (f"No games match “{self._fs_query}”" if self._fs_query
+                     else "No games with this status")
             text = "Press Y to search again, or B to see all your games."
         else:
             title = "Your library is empty"
@@ -811,12 +830,14 @@ class FullscreenMixin:
         elif self._fs_view == "files":
             hints = [("a", "Details"), ("x", "Compare again"), ("lb rb", "Page"), ("b", "Back")]
         elif self._fs_focus is None:
-            hints = ([("y", "Search"), ("b", "Clear search")] if self._fs_query else []) + [("start", "Menu")]
+            hints = ([("y", "Search"), ("b", "Clear filter")] if self._fs_query or self.fs_show else []) \
+                + [("start", "Menu")]
         elif self._fs_view == "game":
             hints = [("a", "Select"), ("x", "Play"), ("b", "Back"), ("start", "Menu")]
         else:
             hints = [("a", "Open"), ("x", "Play"), ("y", "Search")] + (
-                [("b", "Clear search")] if self._fs_query else [("lb rb", "Page")]) + [("start", "Menu")]
+                [("b", "Clear filter")] if self._fs_query or self.fs_show else [("lb rb", "Page")]) \
+                + [("start", "Menu")]
         x = W - p(56)
         for b, text in reversed(hints):
             t = c.create_text(x, y, text=text, anchor="e", fill=FS["ink"], font=self._fs_font(18))
