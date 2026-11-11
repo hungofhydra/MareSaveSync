@@ -9,6 +9,7 @@ from __future__ import annotations
 from .. import launcher, updater
 from ..art import sources as art_sources
 from ..info import sources as info_sources
+from ..core import mine
 from ..core.diff import CHANGED, CLOUD_ONLY, EXCLUDED, LOCAL_ONLY, SAME
 from ..core.util import escape_pattern, fmt_time, human_size
 from .fullscreen import FS
@@ -189,7 +190,11 @@ class FsSettingsMixin:
     def fs_game_more(self, g):
         gs = self.settings.data["games"].get(g, {})
         auto = gs.get("auto_sync", True)
+        mi = self.mine(g)
         choices = [("Show save files", "files"),
+                   (f"Status: {mine.status_name(mi) or 'none'}", "status"),
+                   (f"Tags: {_short(mine.tags_text(mi))}", "tags"),
+                   (f"My notes: {_short(mi.get('notes', '').replace(chr(10), ' '), 28)}", "notes"),
                    (f"Sync automatically when playing: {'On' if auto else 'Off'}", "auto"),
                    (f"Launch options: {gs.get('args') or 'none'}", "args"),
                    (f"Before launching: {_short(gs.get('before_cmd'))}", "before_cmd"),
@@ -200,6 +205,17 @@ class FsSettingsMixin:
         pick = self._fs_ask(g, "", choices, cancel=None)
         if pick == "files":
             self.fs_open_files(g)
+        elif pick == "status":
+            choices = [(name, key) for key, name in mine.STATUSES.items()] + [("No status", ""), ("Cancel", None)]
+            new = self._fs_ask(f"Status — {g}", "", choices, cancel=None)
+            if new is not None:
+                self.set_mine(g, status=new or None)
+        elif pick == "tags":
+            text = self.fs_type(f"Tags — {g}", mine.tags_text(mi), "Separate tags with commas (e.g. rpg, co-op).")
+            if text is not None:
+                self.set_mine(g, tags=mine.parse_tags(text))
+        elif pick == "notes":
+            self._fs_notes(g)
         elif pick == "auto":
             self.settings.game(g)["auto_sync"] = not auto
             self.settings.save()
@@ -226,6 +242,26 @@ class FsSettingsMixin:
                     self.cmd_vars[pick].set(text)
         elif pick == "find":
             self.when_idle(lambda: self.find_saves(g, explicit=True))
+
+    def _fs_notes(self, g):
+        """Read a game's notes. Writing is by adding a line with the on-screen keyboard (a long note can't be
+        changed here: the keyboard holds one short line), so notes written on the desktop are never cut."""
+        notes = self.mine(g).get("notes", "")
+        choices = [("Add a line", "add"), ("Close", None)]
+        if self._fs_ask(f"My notes — {g}", notes or "No notes yet.", choices, cancel=None) == "add":
+            line = self.fs_type(f"Add to the notes — {g}", "", "One line, added at the end of the notes.")
+            if line:
+                self.set_mine(g, notes=(notes + "\n" if notes else "") + line)
+
+    def fs_pick_show(self):
+        """☰ → Show: only the games with one status."""
+        choices = [("All games", "")] + [(name, key) for key, name in self._show_choices.items()
+                                         if key.startswith("status:")] + [("Cancel", None)]
+        new = self._fs_ask("Show", "", choices, cancel=None)
+        if new is not None:
+            self.fs_show = new
+            self._fs_view = "home"
+            self._fs_render()
 
     # ------------------------------------------------------------ save files
     def fs_open_files(self, g):

@@ -45,6 +45,22 @@ IGDB has covers and artwork/screenshots but no logos. Games already showing art 
   game's page shows its hours on each PC. Weekly numbers start with the first session played on this version: older playtime only
   has totals, not dates.
 
+## Your own notes: status, tags, notes
+
+A game's **My notes** tab (next to About) has a **status** (Backlog, Playing, On hold, Completed, Dropped), your own
+**tags** (separated by commas) and free **notes**. They are only for you, unrelated to the game info that comes from
+the internet, and saved with the game in the cloud (in its `savesync.json`), so every PC has them; a change made on
+another PC shows up with the next save check. Changes save as you type.
+
+- The status shows on the game's cover in the library; right-click a cover → **Status** changes it quickly.
+- **Show:** in the library's toolbar lists the statuses and tags in use, with how many games each has, and shows
+  just those games. The search box finds tags too.
+- In fullscreen mode the game's page shows its status and tags, and ⋯ More has **Status**, **Tags** and **My notes**
+  (read them, and add a line with the on-screen keyboard: a longer note written on the desktop is never cut).
+  ☰ → **Show** lists the games with one status; Y search finds tags; **B** clears the filter.
+- If a change can't be written to the cloud (offline), a message says so; it stays on this PC and is sent again at
+  the next save check (also after restarting the app), without being overwritten by the older copy in the cloud.
+
 ## Commands before and after a game
 
 For things like switching the audio device or display mode, closing an overlay or starting a helper. Game tab →
@@ -189,7 +205,8 @@ mss/
   core/                 no GUI: scan.py, excludes.py, diff.py, sync.py, compare.py, playtime.py, settings.py,
                         folders.py, savepaths.py (paths that work on every PC), detect.py (finding save folders),
                         installs.py (where Steam / Epic / GOG installed a game, and its .exe),
-                        emulators.py (emulator presets and launch arguments)
+                        emulators.py (emulator presets and launch arguments), commands.py (a game's commands
+                        before and after it), mine.py (your status, tags and notes)
   storage/              cloud backends: folder.py, gdrive.py (+ oauth_client.py reading .env), common.py
   providers/            online services: sgdb.py (SteamGridDB API), igdb.py (IGDB API), steam.py (Steam store details),
                         wikipedia.py, ludusavi.py (Ludusavi's list of save locations)
@@ -198,6 +215,7 @@ mss/
   ui/
     app.py              main window, built from mixins:
     library.py  details.py  play.py  sync.py  artwork.py  info.py (About tab)  savefind.py (finding save folders)
+    mine.py             the My notes tab, saving it, the library's Show box
     update.py           the Update button, Help → Check for updates…
     fullscreen.py       fullscreen mode (controller UI); gamepad.py reads the Xbox controller (XInput) and
                         makes it rumble;  fs_sound.py  its sounds (generated tones)

@@ -38,6 +38,7 @@ class SyncMixin:
                 except Exception as ex:
                     self.log_ts(f"Checking the saves of {g} failed: {ex}")
                     continue
+                self.q.put(("mine", g, cfg.get("mine")))        # your status, tags and notes ride along
                 if not (self._local_path(g) or folders.MAIN in self._shared_folders(g, cfg)):
                     continue                # no save folder on this PC: nothing to compare
                 state = self._state_from(self._diff(g, cfg, local, cloud))
