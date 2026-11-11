@@ -107,6 +107,14 @@ class SettingsDialog(tk.Toplevel):
         tk.Entry(row, textvariable=self.igdb_key, width=36, show="•", **app._field(row)).pack(
             side="left", fill="x", expand=True)
         Btn(row, "Save key", self._save_igdb_key).pack(side="left", padx=(6, 0))
+        row = tk.Frame(a, bg=T["face"])
+        row.pack(fill="x", pady=(10, 0))
+        label(row, "Both keys on every PC:").pack(side="left")
+        Btn(row, "Sync up", self._keys_up).pack(side="left", padx=(8, 0))
+        Btn(row, "Sync down", self._keys_down).pack(side="left", padx=(6, 0))
+        label(a, "Sync up puts this PC's keys in your storage (shared-settings.json, plain text: anyone who can\n"
+                 "open that folder or Drive account can read them); Sync down takes them on another PC.",
+              muted=True, justify="left").pack(anchor="w", pady=(4, 0))
 
         ap = group(right, "Appearance")
         label(ap, "Mascot image for the corner of the desktop\n(PNG with transparency looks best).",
@@ -177,6 +185,27 @@ class SettingsDialog(tk.Toplevel):
     def _open_fullscreen(self):
         self.destroy()
         self.app.enter_fullscreen()
+
+    def _keys_up(self):
+        self._save_typed_keys()
+        self.app.keys_up()
+
+    def _keys_down(self):
+        self.app.keys_down(then=self._show_keys)
+
+    def _save_typed_keys(self):
+        """Keys typed but not saved yet count too when pressing Sync up."""
+        d = self.app.settings.data
+        d["sgdb_key"] = self.key.get().strip()
+        igdb = self.igdb_key.get().strip()
+        if not igdb or ":" in igdb:
+            d["igdb_key"] = igdb
+        self.app.settings.save()
+
+    def _show_keys(self):
+        if self.winfo_exists():
+            self.key.set(self.app.settings.data.get("sgdb_key", ""))
+            self.igdb_key.set(self.app.settings.data.get("igdb_key", ""))
 
     def _save_key(self):
         self.app.settings.data["sgdb_key"] = self.key.get().strip()

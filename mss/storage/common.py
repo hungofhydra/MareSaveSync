@@ -15,6 +15,7 @@ ART_SUB = "art"
 PLAYTIME_SUB = "playtime"
 ART_JSON = "art.json"
 INFO_JSON = "info.json"           # game info (name, description, …) in the game's folder
+SHARED_JSON = "shared-settings.json"   # settings kept for every PC (API keys), in the MareSaveSync folder itself
 LEGACY_STATS_DIR = ".mss-stats"   # older versions: one playtime file per PC for all games
 LEGACY_ART_DIR = ".mss-art"       # older versions: one art folder per game, outside the game's folder
 

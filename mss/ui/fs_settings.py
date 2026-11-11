@@ -54,6 +54,8 @@ class FsSettingsMixin:
                  self._fs_edit_key),
                 ("IGDB key (client_id:client_secret)", "Set" if d.get("igdb_key") else "Not set — optional",
                  self._fs_edit_igdb_key),
+                ("Sync up API keys", "this PC's keys to the cloud", self.keys_up),
+                ("Sync down API keys", "the cloud's keys to this PC", self.keys_down),
                 ("Covers and game info from", self.art_source().name, self._fs_toggle_art_source),
                 ("This PC's name", d.get("device_name") or "—", self._fs_edit_name)]
         n = len(d.get("emulators", {}))

@@ -22,6 +22,7 @@ from .details import DetailsMixin
 from .fullscreen import FullscreenMixin
 from .dialogs.settings import SettingsDialog
 from .info import InfoMixin
+from .keysync import KeySyncMixin
 from .library import LibraryMixin
 from .mine import MineMixin
 from .play import PlayMixin
@@ -43,9 +44,9 @@ except Exception:            # Pillow missing: plain gradient banner, no mascot 
     ImageTk = theme_art = None
 
 
-class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, MineMixin, PlayMixin, SyncMixin, SaveFindMixin,
-          FullscreenMixin, FsKeyboardMixin, FsAddMixin, FsStatsMixin, FsSettingsMixin, TrayMixin, UpdateMixin,
-          tk.Tk):
+class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, KeySyncMixin, MineMixin, PlayMixin, SyncMixin,
+          SaveFindMixin, FullscreenMixin, FsKeyboardMixin, FsAddMixin, FsStatsMixin, FsSettingsMixin, TrayMixin,
+          UpdateMixin, tk.Tk):
     def __init__(self, start_minimized=False, start_fullscreen=False):
         super().__init__()
         self.title(APP_TITLE)

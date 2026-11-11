@@ -14,7 +14,7 @@ from ..core.util import TMP_SUFFIX, safe_name
 from ..paths import APP_HOME, app_dir
 from . import oauth_client
 from .common import (ART_JSON, ART_SUB, CONFIG_NAME, INFO_JSON, LEGACY_ART_DIR, LEGACY_STATS_DIR, PLAYTIME_SUB,
-                     _group_playtime, _playtime_entry, _replace)
+                     SHARED_JSON, _group_playtime, _playtime_entry, _replace)
 
 FOLDER_MIME = "application/vnd.google-apps.folder"
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]   # only files this app creates
@@ -42,6 +42,7 @@ class DriveBackend:
     """Talks to Google Drive directly.
 
     Layout in My Drive:
+        MareSaveSync/shared-settings.json   settings for every PC (API keys, see core/keys.py)
         MareSaveSync/<game>/        one folder per game (appProperty ssRemoved=1 once removed from the library)
             savesync.json           shared game config (exclusions)
             info.json               game info (name, description, …)
@@ -458,6 +459,32 @@ class DriveBackend:
         ids = self._art_ids.get(game) or self._art_list(game)
         if fname in ids:
             self.svc.files().update(fileId=ids.pop(fname), body={"trashed": True}).execute()
+
+    # ------------------------------------------------- settings kept for every PC
+    def _shared_file(self):
+        items = self._list(f"'{self.root_id}' in parents and trashed = false and name = '{SHARED_JSON}' and "
+                           "appProperties has { key='ssKind' and value='shared' }", "id")
+        return items[0]["id"] if items else None
+
+    def read_shared(self) -> dict:
+        fid = self._shared_file()
+        if not fid:
+            return {}
+        try:
+            doc = json.loads(self._get_bytes(fid).decode("utf-8") or "{}")
+        except ValueError:
+            return {}
+        return doc if isinstance(doc, dict) else {}
+
+    def write_shared(self, doc: dict) -> None:
+        media = self._json_media(doc)
+        fid = self._shared_file()
+        if fid:
+            self.svc.files().update(fileId=fid, media_body=media).execute()
+        else:
+            self.svc.files().create(
+                body={"name": SHARED_JSON, "parents": [self.root_id], "appProperties": {"ssKind": "shared"}},
+                media_body=media, fields="id").execute()
 
     # ----------------------------------------------------------- game info
     def _info_id(self, game):

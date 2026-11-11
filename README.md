@@ -29,6 +29,17 @@ IGDB can be used instead of SteamGridDB for covers, banners and game info (descr
 
 IGDB has covers and artwork/screenshots but no logos. Games already showing art keep it until you reload them.
 
+### Keys on every PC
+
+Keys are saved on each PC, so a new PC would ask for them again. Settings → Artwork → **Sync up** puts this PC's
+SteamGridDB and IGDB keys (including ones typed but not saved yet) in your storage; **Sync down** on another PC takes
+them (and starts the artwork look-ups). Fullscreen mode has the same in ☰ → Settings → Sync up / Sync down API keys.
+Nothing is sent or taken unless you press a button, and neither button ever removes a key: Sync up leaves the cloud's
+other key alone, Sync down leaves this PC's other key alone.
+
+The keys are kept in `shared-settings.json` inside the `MareSaveSync` folder (the Drive account or synced folder),
+as plain text: anyone who can open that can read them. Delete the file to remove them from the cloud.
+
 ## Playing
 
 - Set the game's .exe once per PC (you're asked on first Play, or Game tab → Browse).
@@ -206,7 +217,7 @@ mss/
                         folders.py, savepaths.py (paths that work on every PC), detect.py (finding save folders),
                         installs.py (where Steam / Epic / GOG installed a game, and its .exe),
                         emulators.py (emulator presets and launch arguments), commands.py (a game's commands
-                        before and after it), mine.py (your status, tags and notes)
+                        before and after it), mine.py (your status, tags and notes), keys.py (API keys in the cloud)
   storage/              cloud backends: folder.py, gdrive.py (+ oauth_client.py reading .env), common.py
   providers/            online services: sgdb.py (SteamGridDB API), igdb.py (IGDB API), steam.py (Steam store details),
                         wikipedia.py, ludusavi.py (Ludusavi's list of save locations)
@@ -215,7 +226,7 @@ mss/
   ui/
     app.py              main window, built from mixins:
     library.py  details.py  play.py  sync.py  artwork.py  info.py (About tab)  savefind.py (finding save folders)
-    mine.py             the My notes tab, saving it, the library's Show box
+    mine.py             the My notes tab, saving it, the library's Show box;  keysync.py  Sync up / down of the keys
     update.py           the Update button, Help → Check for updates…
     fullscreen.py       fullscreen mode (controller UI); gamepad.py reads the Xbox controller (XInput) and
                         makes it rumble;  fs_sound.py  its sounds (generated tones)
