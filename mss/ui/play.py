@@ -8,7 +8,7 @@ from pathlib import Path
 from tkinter import filedialog
 
 from .. import APP_TITLE, launcher
-from ..core import emulators
+from ..core import commands, emulators
 from ..core.diff import auto_direction
 from ..core.playtime import add_session, aggregate_stats, fmt_play_long
 from ..core.sync import make_plan
@@ -186,9 +186,47 @@ class PlayMixin:
             self._launch(g)
 
     def _launch(self, g):
+        """Start the game, after its "before launching" command (if it has one) has run."""
+        before = self.settings.data["games"].get(g, {}).get("before_cmd", "").strip()
+        if not before:
+            self._begin(g)
+            return
+        program, _ = self.launch_command(g) or (None, "")
+        env, folder = commands.game_env(g, program), commands.start_folder(program)
+        self.log(f"{g}: running its command before launching: {before}")
+        self.when_idle(lambda: self.run_bg(f"Before launching {g}", lambda: commands.run(before, folder, env),
+                                           lambda res: self._before_done(g, res)))
+
+    def _before_done(self, g, res):
+        if res.ok:
+            self.log(f"{g}: the command before launching finished")
+        else:
+            self.log(f"{g}: the command before launching {res.problem()}")
+            self.show_window()
+            if not self.confirm(APP_TITLE, f"The command to run before {g} starts {res.problem()}\n\n"
+                                           f"Command: {res.command}\n\nPlay anyway?"):
+                return
+        if g in self.all_games and g not in self.sessions:
+            self._begin(g)
+
+    def _begin(self, g):
         self._start_session(g)
         if not self.fs_on:          # fullscreen mode stays up behind the game, like a console's home screen
             self.after(400, self.minimize)
+
+    def _run_after_command(self, g, seconds, program):
+        """The game's "after it closes" command: in the background, so saving and syncing don't wait for it."""
+        after = self.settings.data["games"].get(g, {}).get("after_cmd", "").strip()
+        if not after:
+            return
+        env, folder = commands.game_env(g, program, seconds), commands.start_folder(program)
+        self.log(f"{g}: running its command after the game: {after}")
+
+        def work():
+            res = commands.run(after, folder, env)
+            self.log_ts(f"{g}: the command after the game finished" if res.ok
+                        else f"{g}: the command after the game {res.problem()}")
+        threading.Thread(target=work, daemon=True).start()
 
     def _start_session(self, g, attach_started=None):
         exe, args = self.launch_command(g)
@@ -234,7 +272,9 @@ class PlayMixin:
         self.notify(f"{g} is running — playtime is being counted and saves will be synced when it closes.")
 
     def _on_game_end(self, g, seconds, err):
-        self.sessions.pop(g, None)
+        sess = self.sessions.pop(g, None)
+        if sess is not None and not sess.attach_started and g in self.all_games:     # only games Play started
+            self._run_after_command(g, seconds, (self.launch_command(g) or (None,))[0])
         self.refresh_tray_menu()
         self.set_tray_text(f"playing {', '.join(self.sessions)}" if self.sessions else "")
         if not self.sessions:

@@ -491,6 +491,14 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, PlayMixin, SyncMi
             self.settings.game(self.game)["args"] = self.args_var.get().strip()
             self.settings.save()
 
+    def _save_cmd(self, key):
+        """key: "before_cmd" or "after_cmd" (see core/commands.py)."""
+        if self.game:
+            text = self.cmd_vars[key].get().strip()
+            if text != self.settings.data["games"].get(self.game, {}).get(key, ""):
+                self.settings.game(self.game)[key] = text
+                self.settings.save()
+
     def _save_auto(self):
         if self.game:
             self.settings.game(self.game)["auto_sync"] = self.auto_var.get()
