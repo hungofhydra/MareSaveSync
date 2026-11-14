@@ -10,7 +10,7 @@ from .. import CLOUD_ROOT, LEGACY_CLOUD_ROOT
 from ..core.scan import scan_folder
 from ..core.util import TMP_SUFFIX, prune_empty_dirs, safe_name
 from .common import (ART_JSON, ART_SUB, CONFIG_NAME, INFO_JSON, LEGACY_ART_DIR, LEGACY_STATS_DIR, PLAYTIME_SUB,
-                     SHARED_JSON, _group_playtime, _playtime_entry, _replace, _write_json)
+                     SHARED_JSON, _group_playtime, _playtime_entry, _playtime_seen, _replace, _write_json)
 
 
 class FolderBackend:
@@ -36,7 +36,7 @@ class FolderBackend:
         self._dirs: dict[str, Path] = {}          # every game folder, removed ones included
         self._removed: set[str] = set()
         self._added: dict[str, float] = {}         # game -> when it was added to the library
-        self._pt_seen: dict[tuple, tuple] = {}    # (game, device) -> (seconds, last_played) in the cloud
+        self._pt_seen: dict[tuple, tuple] = {}    # (game, device) -> _playtime_seen() of the cloud's
 
     def describe(self) -> str:
         return f"Folder: {self.root}"
@@ -155,7 +155,7 @@ class FolderBackend:
                 except (OSError, ValueError):
                     continue
                 entries.append(e)
-                self._pt_seen[(game, e.get("device_id"))] = (e.get("seconds", 0), e.get("last_played", 0))
+                self._pt_seen[(game, e.get("device_id"))] = _playtime_seen(e)
         old = self.root / LEGACY_STATS_DIR
         for p in old.glob("*.json") if old.is_dir() else []:
             try:
@@ -185,14 +185,14 @@ class FolderBackend:
         """Writes this PC's playtime into each game's playtime/ folder (only games that changed)."""
         for game, st in (doc.get("games") or {}).items():
             e = _playtime_entry(game, device_id, doc, st)
-            if self._pt_seen.get((game, device_id)) == (e["seconds"], e["last_played"]):
+            if self._pt_seen.get((game, device_id)) == _playtime_seen(e):
                 continue
             try:
                 d = self._dir(game)
             except KeyError:                       # no folder for it (e.g. removed by an older version)
                 continue
             _write_json(d / PLAYTIME_SUB / f"{device_id}.json", e)
-            self._pt_seen[(game, device_id)] = (e["seconds"], e["last_played"])
+            self._pt_seen[(game, device_id)] = _playtime_seen(e)
 
     # ------------------------------------------------------------- artwork
     def _art_dir(self, name) -> Path:
