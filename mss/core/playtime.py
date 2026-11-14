@@ -2,10 +2,14 @@
 
 Each PC keeps, per game, its total seconds, when it was last played, and "days": {"YYYY-MM-DD": seconds} (local
 dates, the last DAYS_KEPT days). Days are only known from when this was added; earlier playtime has no date.
+
+A total set by hand also has "edited" (when): the newest edit wins over what was counted before it, where
+otherwise the larger of two totals for the same PC does.
 """
 from __future__ import annotations
 
 import datetime as dt
+import re
 import time
 
 DAYS_KEPT = 400
@@ -58,6 +62,41 @@ def add_session(days: dict, end: float, seconds: float) -> dict:
     oldest = (t1.date() - dt.timedelta(days=DAYS_KEPT)).isoformat()
     for k in [k for k in days if k < oldest]:
         del days[k]
+    return days
+
+
+MAX_HOURS = 1_000_000
+
+
+def parse_duration(text) -> float | None:
+    """Seconds from a playtime typed by hand: "12h 30m", "12 h 30 min", "90 minutes", "12:30" (hours:minutes)
+    or just "12.5" (hours). None if it isn't one."""
+    s = (text or "").strip().lower().replace(",", ".")
+    num = r"(\d+(?:\.\d+)?)"
+    if m := re.fullmatch(r"(\d+):([0-5]?\d)(?::([0-5]?\d))?", s):
+        secs = int(m[1]) * 3600 + int(m[2]) * 60 + int(m[3] or 0)
+    elif (m := re.fullmatch(rf"(?:{num}\s*h(?:ours?|rs?)?)?\s*(?:{num}\s*m(?:in(?:utes?|s)?)?)?", s)) and (m[1] or m[2]):
+        secs = float(m[1] or 0) * 3600 + float(m[2] or 0) * 60
+    elif m := re.fullmatch(num, s):
+        secs = float(m[1]) * 3600
+    else:
+        return None
+    return float(secs) if secs <= MAX_HOURS * 3600 else None
+
+
+def trim_days(days: dict, seconds: float) -> dict:
+    """After the total was lowered by hand: the days can't add up to more than it. The extra comes off the
+    newest days (a game left running is the usual reason to lower playtime)."""
+    extra = sum(days.values()) - seconds
+    for key in sorted(days, reverse=True):
+        if extra <= 0:
+            break
+        cut = min(days[key], extra)
+        extra -= cut
+        if days[key] - cut < 0.05:
+            del days[key]
+        else:
+            days[key] = round(days[key] - cut, 1)
     return days
 
 

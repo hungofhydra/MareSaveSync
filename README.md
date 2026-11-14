@@ -55,6 +55,11 @@ as plain text: anyone who can open that can read them. Delete the file to remove
   hours on each PC. In fullscreen mode it's ☰ → **Playtime stats** (◀ ▶ pick a week to see its games), and a
   game's page shows its hours on each PC. Weekly numbers start with the first session played on this version: older playtime only
   has totals, not dates.
+- **Edit playtime…** (a game's Game tab or Options menu; in fullscreen mode its page → More → **Playtime**)
+  sets a game's playtime by hand, for hours played before you used the app or a game left running overnight.
+  Type it as `12h 30m`, `90m`, `12:30` or `12.5` (hours). You set the total of all PCs; the change is made to
+  this PC's part, so the total can't go below what your other PCs counted (lower it there instead). Lowering
+  it takes the extra off the most recent days of the weekly numbers; added hours have no date.
 
 ## Your own notes: status, tags, notes
 

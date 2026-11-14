@@ -5,12 +5,12 @@ import datetime as dt
 import threading
 import time
 from pathlib import Path
-from tkinter import filedialog
+from tkinter import filedialog, simpledialog
 
 from .. import APP_TITLE, launcher
 from ..core import commands, emulators
 from ..core.diff import auto_direction
-from ..core.playtime import add_session, aggregate_stats, fmt_play_long
+from ..core.playtime import add_session, aggregate_stats, fmt_play_long, parse_duration, trim_days
 from ..core.sync import make_plan
 
 
@@ -62,9 +62,14 @@ class PlayMixin:
         changed = False
         for g, st in cloud_mine.items():
             m = mine.setdefault(g, {"seconds": 0, "last_played": 0})
-            for k in ("seconds", "last_played"):
-                if st.get(k, 0) > m.get(k, 0):
-                    m[k] = st[k]
+            if st.get("last_played", 0) > m.get("last_played", 0):
+                m["last_played"] = st["last_played"]
+            edited, mine_edited = st.get("edited", 0), m.get("edited", 0)
+            if edited > mine_edited:            # set by hand since what's here: it replaces it
+                m.update(seconds=st.get("seconds", 0), edited=edited)
+                trim_days(m.get("days") or {}, m["seconds"])
+            elif edited == mine_edited and st.get("seconds", 0) > m.get("seconds", 0):
+                m["seconds"] = st["seconds"]    # (a total set by hand here is kept: the cloud's is from before)
         if mine != cloud_mine:
             changed = True
         others = [f for f in files if f.get("device_id") != dev]
@@ -99,6 +104,54 @@ class PlayMixin:
         a["last_played"] = now
         self.settings.save()
         self.resort()
+
+    # ------------------------------------------------- playtime set by hand
+    def set_playtime(self, g, total) -> float:
+        """Set a game's playtime on all PCs together to `total` seconds. Only this PC's part can change (the
+        others' is theirs to write), so the total can't go below theirs. Returns the total it is now."""
+        m = self.settings.data.setdefault("my_stats", {}).setdefault(g, {"seconds": 0, "last_played": 0})
+        a = self.stats_all.setdefault(g, {"seconds": 0, "last_played": 0})
+        others = max(0.0, a.get("seconds", 0) - m.get("seconds", 0))
+        m["seconds"] = max(0.0, float(total) - others)
+        m["edited"] = time.time()               # so the larger total still in the cloud doesn't come back
+        if m.get("days"):
+            trim_days(m["days"], m["seconds"])
+        a["seconds"] = others + m["seconds"]
+        self.settings.save()
+        self.log(f"{g}: playtime set by hand to {fmt_play_long(a['seconds'])}")
+        self.resort()
+        if self.game == g:
+            self._render_header()
+            self._draw_hero()
+        self._layout_grid()
+        self._fs_refresh()
+        self.when_idle(self._push_stats)
+        return a["seconds"]
+
+    def edit_playtime(self, g):
+        """Ask for a game's playtime and set it (desktop and fullscreen mode)."""
+        if g not in self.all_games:
+            return
+        now = fmt_play_long(self.stats_all.get(g, {}).get("seconds", 0))
+        hint = "For example 12h 30m, 90m, 12:30 or 12.5 (hours)."
+        if self.fs_on:
+            text = self.fs_type(f"Playtime — {g}", now, hint)
+        else:
+            text = simpledialog.askstring("Edit playtime", f"Playtime of {g} on all PCs together.\n{hint}",
+                                          parent=self, initialvalue=now)
+        if text is None or g not in self.all_games:
+            return
+        want = parse_duration(text)
+        if want is None:
+            self.tell("Edit playtime", f"“{text.strip()}” isn't a playtime.\n\n{hint}", "error")
+            return
+        got = self.set_playtime(g, want)
+        if got >= want + 60:
+            self.tell("Edit playtime", f"{g} has {fmt_play_long(got)} of playtime on your other PCs, which can "
+                      "only be changed on those PCs.\n\nThis PC's playtime for it is now 0, so the total is "
+                      f"{fmt_play_long(got)}.", "warning")
+        else:
+            self.note(f"{g}: playtime is now {fmt_play_long(got)}")
 
     def play_current(self):
         if self.game in self.sessions:

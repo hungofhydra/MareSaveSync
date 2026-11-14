@@ -169,8 +169,11 @@ class DetailsMixin:
         self.auto_var = tk.BooleanVar(value=True)
         check(gt, "Sync automatically: download saves before playing, upload them after the game closes",
               self.auto_var, self._save_auto).pack(anchor="w", pady=(8, 0))
-        self.play_info = label(gt, "", muted=True, justify="left")
-        self.play_info.pack(anchor="w", pady=(8, 0))
+        r = tk.Frame(gt, bg=T["face"])
+        r.pack(fill="x", pady=(8, 0))
+        self.play_info = label(r, "", muted=True, justify="left")
+        self.play_info.pack(side="left")
+        Btn(r, "Edit playtime…", lambda: self.edit_playtime(self.game)).pack(side="right", anchor="n")
         r = tk.Frame(gt, bg=T["face"])
         r.pack(fill="x", pady=(10, 0))
         Btn(r, "Game info & artwork…", lambda: MetadataDialog(self, self.game)).pack(side="left")
@@ -237,6 +240,7 @@ class DetailsMixin:
         m.add_command(label="Game info & artwork…", command=lambda: MetadataDialog(self, g))
         m.add_command(label="Reload artwork", command=lambda: self.art_q.put((g, True)))
         m.add_command(label="Reload game info", command=lambda: self.reload_info(g))
+        m.add_command(label="Edit playtime…", command=lambda: self.edit_playtime(g))
         if g in self.sessions:
             m.add_separator()
             m.add_command(label="Game has closed (stop tracking)", command=lambda: self.sessions[g].stop_tracking())
