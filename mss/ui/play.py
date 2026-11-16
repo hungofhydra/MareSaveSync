@@ -105,6 +105,42 @@ class PlayMixin:
         self.settings.save()
         self.resort()
 
+    # ------------------------------------------------- desktop shortcuts
+    def add_desktop_shortcut(self, g):
+        """A desktop shortcut that plays the game through the app (launcher.create_game_shortcut)."""
+        if g not in self.all_games:
+            return
+        path = launcher.game_shortcut_path(g)
+        if path.exists() and not self.confirm(APP_TITLE, f"The desktop already has a shortcut called "
+                                              f"“{path.stem}”.\n\nReplace it?"):
+            return
+        program = (self.launch_command(g) or (None,))[0]       # the game's .exe, or its emulator's
+        icon = program if program and program.lower().endswith(".exe") else None      # else the app's icon
+        self.run_bg(f"Adding a desktop shortcut for {g}", lambda: launcher.create_game_shortcut(g, icon),
+                    lambda p: self.note(f"{g}: shortcut added to the desktop"),
+                    failed=lambda ex: self.tell(APP_TITLE, f"Couldn't add a desktop shortcut for {g}:\n{ex}",
+                                                "error"))
+
+    SHORTCUT_WAIT = 60      # seconds a shortcut waits for the library to load before saying the game isn't in it
+
+    def play_from_shortcut(self, g, waited=0.0):
+        """Started by a desktop shortcut (--play): play the game once the library has loaded and nothing else
+        is running (connecting, a sync), like picking it in the tray menu."""
+        if g in self.all_games:
+            self.when_idle(lambda: self._shortcut_play(g))
+        elif waited < self.SHORTCUT_WAIT:
+            self.after(500, lambda: self.play_from_shortcut(g, waited + 0.5))
+        else:
+            self.show_window()
+            self.tell(APP_TITLE, f"“{g}” isn't in the library" + (" (not connected to the cloud)."
+                      if self.backend is None else ".\n\nIf it was renamed or removed, delete the old shortcut "
+                      "and add a new one from the game's menu."), "warning")
+
+    def _shortcut_play(self, g):
+        if g in self.sessions:
+            self.notify(f"{g} is already running.")
+        elif g in self.all_games:
+            self._tray_play(g)
     # ------------------------------------------------- playtime set by hand
     def set_playtime(self, g, total) -> float:
         """Set a game's playtime on all PCs together to `total` seconds. Only this PC's part can change (the
