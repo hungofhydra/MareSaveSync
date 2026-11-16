@@ -52,7 +52,14 @@ def _playtime_entry(game, device_id, doc, st) -> dict:
          "seconds": st.get("seconds", 0), "last_played": st.get("last_played", 0)}
     if st.get("days"):
         e["days"] = st["days"]           # seconds per date, for the weekly chart (see core/playtime.py)
+    if st.get("edited"):
+        e["edited"] = st["edited"]       # when the total was set by hand
     return e
+
+
+def _playtime_seen(e) -> tuple:
+    """What tells whether a playtime entry in the cloud is the one this PC would write."""
+    return e.get("seconds", 0), e.get("last_played", 0), e.get("edited") or 0
 
 
 def _group_playtime(entries, legacy) -> list[dict]:
@@ -64,8 +71,12 @@ def _group_playtime(entries, legacy) -> list[dict]:
         d = docs.setdefault(dev, {"device_id": dev, "device": devname, "games": {}})
         d["device"] = d["device"] or devname
         g = d["games"].setdefault(game, {"seconds": 0, "last_played": 0})
-        for k in g:
-            g[k] = max(g[k], float(st.get(k) or 0))
+        g["last_played"] = max(g["last_played"], float(st.get("last_played") or 0))
+        secs, edited = float(st.get("seconds") or 0), float(st.get("edited") or 0)
+        if edited > g.get("edited", 0):          # set by hand since: replaces what was counted before
+            g.update(seconds=secs, edited=edited)
+        elif edited == g.get("edited", 0):
+            g["seconds"] = max(g["seconds"], secs)
 
     for doc in legacy:
         for game, st in (doc.get("games") or {}).items():

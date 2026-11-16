@@ -11,6 +11,7 @@ from ..art import sources as art_sources
 from ..info import sources as info_sources
 from ..core import mine
 from ..core.diff import CHANGED, CLOUD_ONLY, EXCLUDED, LOCAL_ONLY, SAME
+from ..core.playtime import fmt_play_long
 from ..core.util import escape_pattern, fmt_time, human_size
 from .fullscreen import FS
 
@@ -197,6 +198,7 @@ class FsSettingsMixin:
                    (f"Status: {mine.status_name(mi) or 'none'}", "status"),
                    (f"Tags: {_short(mine.tags_text(mi))}", "tags"),
                    (f"My notes: {_short(mi.get('notes', '').replace(chr(10), ' '), 28)}", "notes"),
+                   (f"Playtime: {fmt_play_long(self.stats_all.get(g, {}).get('seconds', 0))}", "playtime"),
                    (f"Sync automatically when playing: {'On' if auto else 'Off'}", "auto"),
                    (f"Launch options: {gs.get('args') or 'none'}", "args"),
                    (f"Before launching: {_short(gs.get('before_cmd'))}", "before_cmd"),
@@ -218,6 +220,8 @@ class FsSettingsMixin:
                 self.set_mine(g, tags=mine.parse_tags(text))
         elif pick == "notes":
             self._fs_notes(g)
+        elif pick == "playtime":
+            self.edit_playtime(g)
         elif pick == "auto":
             self.settings.game(g)["auto_sync"] = not auto
             self.settings.save()

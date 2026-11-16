@@ -14,7 +14,7 @@ from ..core.util import TMP_SUFFIX, safe_name
 from ..paths import APP_HOME, app_dir
 from . import oauth_client
 from .common import (ART_JSON, ART_SUB, CONFIG_NAME, INFO_JSON, LEGACY_ART_DIR, LEGACY_STATS_DIR, PLAYTIME_SUB,
-                     SHARED_JSON, _group_playtime, _playtime_entry, _replace)
+                     SHARED_JSON, _group_playtime, _playtime_entry, _playtime_seen, _replace)
 
 FOLDER_MIME = "application/vnd.google-apps.folder"
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]   # only files this app creates
@@ -96,7 +96,7 @@ class DriveBackend:
         self._subs: dict[tuple, str] = {}         # (game, "art"/"playtime") -> folder id
         self._art_ids: dict[str, dict[str, str]] = {}
         self._pt_ids: dict[tuple, str] = {}       # (game, device) -> file id
-        self._pt_seen: dict[tuple, tuple] = {}    # (game, device) -> (seconds, last_played) in the cloud
+        self._pt_seen: dict[tuple, tuple] = {}    # (game, device) -> _playtime_seen() of the cloud's
 
     def describe(self) -> str:
         try:
@@ -342,9 +342,11 @@ class DriveBackend:
             ap = it.get("appProperties") or {}
             e = {"game": game, "device_id": ap.get("ssDevice"), "device": ap.get("ssDeviceName", ""),
                  "seconds": float(ap.get("ssSeconds") or 0), "last_played": float(ap.get("ssLast") or 0)}
+            if ap.get("ssEdited"):
+                e["edited"] = float(ap["ssEdited"])
             entries.append(e)
             self._pt_ids[(game, e["device_id"])] = it["id"]
-            self._pt_seen[(game, e["device_id"])] = (e["seconds"], e["last_played"])
+            self._pt_seen[(game, e["device_id"])] = _playtime_seen(e)
         legacy = []
         old = self._find_folder(LEGACY_STATS_DIR, self.root_id)
         for it in self._list(f"'{old}' in parents and trashed = false", "id") if old else []:
@@ -375,7 +377,7 @@ class DriveBackend:
         for game, st in (doc.get("games") or {}).items():
             e = _playtime_entry(game, device_id, doc, st)
             key = (game, device_id)
-            if self._pt_seen.get(key) == (e["seconds"], e["last_played"]):
+            if self._pt_seen.get(key) == _playtime_seen(e):
                 continue
             try:
                 folder = self._sub(game, PLAYTIME_SUB, create=True)
@@ -383,6 +385,8 @@ class DriveBackend:
                 continue
             props = {"ssKind": "playtime", "ssDevice": device_id, "ssDeviceName": e["device"].encode()[:96].decode(errors="ignore"),
                      "ssSeconds": repr(float(e["seconds"])), "ssLast": repr(float(e["last_played"]))}
+            if e.get("edited"):
+                props["ssEdited"] = repr(float(e["edited"]))
             media = self._json_media(e)
             if key not in self._pt_ids:
                 found = self._list(f"'{folder}' in parents and name = '{_q(device_id)}.json' and trashed = false",
@@ -396,7 +400,7 @@ class DriveBackend:
                 self._pt_ids[key] = self.svc.files().create(
                     body={"name": f"{device_id}.json", "parents": [folder], "appProperties": props},
                     media_body=media, fields="id").execute()["id"]
-            self._pt_seen[key] = (e["seconds"], e["last_played"])
+            self._pt_seen[key] = _playtime_seen(e)
 
     # ------------------------------------------------------------- artwork
     def _art_folder(self, game, create=False):
