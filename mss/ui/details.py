@@ -237,6 +237,7 @@ class DetailsMixin:
         m.add_command(label="Game info & artwork…", command=lambda: MetadataDialog(self, g))
         m.add_command(label="Reload artwork", command=lambda: self.art_q.put((g, True)))
         m.add_command(label="Reload game info", command=lambda: self.reload_info(g))
+        m.add_command(label="Add desktop shortcut", command=lambda: self.add_desktop_shortcut(g))
         if g in self.sessions:
             m.add_separator()
             m.add_command(label="Game has closed (stop tracking)", command=lambda: self.sessions[g].stop_tracking())

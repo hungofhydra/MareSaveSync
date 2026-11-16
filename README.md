@@ -48,6 +48,11 @@ as plain text: anyone who can open that can read them. Delete the file to remove
   running, so launchers that start the real game and exit are handled. If it ever keeps saying
   “Playing” after you quit, press **Playing…** (or Options → Game has closed) to stop tracking.
 - Turn off “Sync automatically” in the Game tab for games you want to sync by hand.
+- **Desktop shortcuts:** right-click a game's cover (or its Options menu) → **Add desktop shortcut**. The shortcut
+  plays the game through the app, exactly like Play: saves are synced before and after and playtime is counted.
+  If the app isn't open it starts in the tray first and plays once the library has loaded. It has the game's
+  icon when its .exe (or emulator) is set on this PC. Shortcuts point at where the app is now, so make them
+  again if you move the `MareSaveSync` folder or rename the game.
 - Achievements are not synced
 - **View → Playtime stats…** shows your playtime on all PCs together: this week, the last 30 days and all
   time, hours per week for the last 12 weeks (a chart, or the same as a table; hover a week to see its games),

@@ -3,6 +3,7 @@ start-with-Windows option."""
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -11,7 +12,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from .paths import FROZEN, RES_DIR, SOURCE_ROOT
+from .paths import APP_HOME, ASSETS, FROZEN, RES_DIR, SOURCE_ROOT
 
 try:
     import psutil
@@ -227,3 +228,93 @@ def set_startup(enabled: bool) -> None:
                 winreg.DeleteValue(k, APP_RUN_NAME)
             except FileNotFoundError:
                 pass
+
+
+# ------------------------------------------------------------- desktop shortcuts
+PLAY_ARG = "--play"                 # MareSaveSync.exe --play "<game>": play it through the app (see ui/app.py main)
+
+
+def _guid(text: str):
+    import ctypes
+    import uuid
+    return (ctypes.c_byte * 16).from_buffer_copy(uuid.UUID(text).bytes_le)
+
+
+def desktop_dir() -> Path:
+    """This user's desktop folder, wherever Windows keeps it (OneDrive can move it)."""
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+        sh = ctypes.windll.shell32
+        sh.SHGetKnownFolderPath.argtypes = [ctypes.c_void_p, wintypes.DWORD, wintypes.HANDLE,
+                                            ctypes.POINTER(ctypes.c_wchar_p)]
+        ptr = ctypes.c_wchar_p()
+        folder = _guid("B4BFCC3A-DB2C-424C-B029-7FE99A87C641")         # FOLDERID_Desktop
+        if sh.SHGetKnownFolderPath(ctypes.byref(folder), 0, None, ctypes.byref(ptr)) == 0:
+            try:
+                return Path(ptr.value)
+            finally:
+                ctypes.windll.ole32.CoTaskMemFree(ptr)
+    return Path.home() / "Desktop"
+
+
+def game_shortcut_path(game: str) -> Path:
+    """Where the game's desktop shortcut goes: <desktop>/<game>.lnk, minus characters a file name can't have."""
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", game).strip(" .") or "Game"
+    return desktop_dir() / f"{name}.lnk"
+
+
+def _save_lnk(path: Path, target: str, args: str, folder: str, desc: str, icon: str) -> None:
+    """Write a .lnk with the shell's own IShellLinkW (Unicode throughout: WScript.Shell goes through the ANSI
+    code page and fails on names outside it)."""
+    import ctypes
+    from ctypes import HRESULT, c_int, c_void_p, c_wchar_p
+
+    ole = ctypes.windll.ole32
+    ole.CoCreateInstance.argtypes = [c_void_p, c_void_p, ctypes.c_ulong, c_void_p, ctypes.POINTER(c_void_p)]
+
+    def method(obj, index, *argtypes):
+        """The COM object's vtable entry `index`, callable as f(*args) -> HRESULT (raises OSError on failure)."""
+        vtbl = ctypes.cast(obj, ctypes.POINTER(ctypes.POINTER(c_void_p))).contents
+        fn = ctypes.WINFUNCTYPE(HRESULT, c_void_p, *argtypes)(vtbl[index])
+        return lambda *a: fn(obj, *a)
+
+    init = ole.CoInitializeEx(None, 2)                  # apartment-threaded; fine if this thread already has it
+    link = c_void_p()
+    try:
+        ole.CoCreateInstance(ctypes.byref(_guid("00021401-0000-0000-C000-000000000046")), None, 1,   # ShellLink
+                             ctypes.byref(_guid("000214F9-0000-0000-C000-000000000046")),              # IShellLinkW
+                             ctypes.byref(link))
+        # IShellLinkW: 7 SetDescription, 9 SetWorkingDirectory, 11 SetArguments, 17 SetIconLocation, 20 SetPath
+        method(link, 20, c_wchar_p)(target)
+        method(link, 11, c_wchar_p)(args)
+        method(link, 9, c_wchar_p)(folder)
+        method(link, 7, c_wchar_p)(desc)
+        method(link, 17, c_wchar_p, c_int)(icon, 0)
+        persist = c_void_p()
+        method(link, 0, c_void_p, ctypes.POINTER(c_void_p))(                                  # QueryInterface
+            ctypes.byref(_guid("0000010B-0000-0000-C000-000000000046")), ctypes.byref(persist))  # IPersistFile
+        try:
+            method(persist, 6, c_wchar_p, c_int)(str(path), 1)                                   # Save
+        finally:
+            method(persist, 2)()                                                                 # Release
+    finally:
+        if link:
+            method(link, 2)()
+        if init in (0, 1):                              # S_OK / S_FALSE: this call initialized it
+            ole.CoUninitialize()
+
+
+def create_game_shortcut(game: str, icon: str | None = None) -> Path:
+    """Put a shortcut on the desktop that plays `game` through this app, so its saves are synced and its playtime
+    is counted as with Play. icon: a program to take the icon from (the game's .exe); else the app's. Replaces a
+    shortcut already there. Returns its path; OSError if it couldn't be made."""
+    if sys.platform != "win32":
+        raise OSError("Desktop shortcuts are only available on Windows.")
+    exe, pre = app_command()
+    path = game_shortcut_path(game)
+    _save_lnk(path, exe, subprocess.list2cmdline([*pre, PLAY_ARG, game]), str(APP_HOME),
+              f"Play {game} with Mare Save Sync"[:259], icon or (exe if FROZEN else str(ASSETS / "icon.ico")))
+    if not path.is_file():
+        raise OSError("Windows didn't create the shortcut.")
+    return path

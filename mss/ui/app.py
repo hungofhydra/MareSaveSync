@@ -587,6 +587,8 @@ class App(LibraryMixin, DetailsMixin, ArtworkMixin, InfoMixin, KeySyncMixin, Min
 
     def _on_instance(self, msg):
         """Mare Save Sync was started again (see instance.py): show this one instead."""
+        if msg.startswith("play "):           # a game's desktop shortcut
+            self.play_from_shortcut(msg[5:])
         if msg in ("show", "fullscreen"):
             self.show_window()
         if msg == "fullscreen":
@@ -615,11 +617,16 @@ def main():
         return
     fullscreen = "--fullscreen" in sys.argv   # e.g. started by AnyFSE as the full screen experience's home app
     minimized = "--minimized" in sys.argv and not fullscreen
-    if instance.send("fullscreen" if fullscreen else "" if minimized else "show"):
+    i = sys.argv.index(launcher.PLAY_ARG) + 1 if launcher.PLAY_ARG in sys.argv else 0
+    play = sys.argv[i].strip() if 0 < i < len(sys.argv) else ""   # a game's desktop shortcut
+    minimized = minimized or (bool(play) and not fullscreen)       # the app waits in the tray while it plays
+    if instance.send(f"play {play}" if play else "fullscreen" if fullscreen else "" if minimized else "show"):
         return                                 # it's already running and has been asked to show itself
     applog.setup()                             # only the running copy writes the log file
     launcher.refresh_startup()                # the folder may have moved since "Start with Windows" was set
     threading.Timer(15, updater.cleanup).start()   # after an update: the updater may still be closing
     app = App(start_minimized=minimized, start_fullscreen=fullscreen)
     instance.serve(lambda msg: app.q.put(("instance", msg)))
+    if play:
+        app.play_from_shortcut(play)
     app.mainloop()

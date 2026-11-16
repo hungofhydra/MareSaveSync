@@ -50,7 +50,7 @@ def serve(on_message) -> None:
             with conn:
                 try:
                     conn.settimeout(2)
-                    tok, _, msg = conn.recv(256).decode("utf-8", "replace").strip().partition(" ")
+                    tok, _, msg = conn.recv(4096).decode("utf-8", "replace").strip().partition(" ")
                     if secrets.compare_digest(tok, token):
                         conn.sendall(b"ok")
                         on_message(msg)

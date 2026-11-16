@@ -171,6 +171,7 @@ class LibraryMixin:
         m.add_separator()
         m.add_command(label="Set game executable…", command=lambda: self.pick_exe(g))
         m.add_command(label="Game info & artwork…", command=lambda: MetadataDialog(self, g))
+        m.add_command(label="Add desktop shortcut", command=lambda: self.add_desktop_shortcut(g))
         sm = menu(m)
         for key, name in {None: "No status", **mine.STATUSES}.items():
             sm.add_command(label=("✓  " if self.mine(g).get("status") == key else "     ") + name,
